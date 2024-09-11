@@ -1,12 +1,13 @@
 package http
 
 import (
-	"database/sql"
+	_ "database/sql"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jmoiron/sqlx"
 )
 
-func InitRoutes(conn *sql.DB) *gin.Engine {
+func InitRoutes(conn *sqlx.DB) *gin.Engine {
 	routes := gin.Default()
 	routeGroup := routes.Group("/api")
 
