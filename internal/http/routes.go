@@ -7,11 +7,14 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+var db *sqlx.DB
+
 func InitRoutes(conn *sqlx.DB) *gin.Engine {
+	db = conn
 	routes := gin.Default()
 	routeGroup := routes.Group("/api")
 
-	InitTenderRoutes(routeGroup, conn)
+	InitTenderRoutes(routeGroup)
 	//InitBidRouters(apiRoutes)
 
 	return routes

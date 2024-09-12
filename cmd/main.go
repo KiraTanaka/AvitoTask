@@ -4,6 +4,8 @@ import (
 	_ "database/sql"
 	"fmt"
 
+	validator "avitoTask/internal"
+	"avitoTask/internal/auth"
 	"avitoTask/internal/http"
 
 	"github.com/jmoiron/sqlx"
@@ -21,11 +23,10 @@ const (
 var db *sqlx.DB
 
 func main() {
-	var err error
 	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s "+
 		"password=%s dbname=%s sslmode=disable",
 		host, port, user, password, dbname)
-	db, err = sqlx.Connect("postgres", psqlInfo)
+	db, err := sqlx.Connect("postgres", psqlInfo)
 	if err != nil {
 		panic(err)
 	}
@@ -35,6 +36,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	auth.InitAuth(db)
+	validator.InitValidator(db)
 	routes := http.InitRoutes(db)
 
 	routes.Run("localhost:8080")
