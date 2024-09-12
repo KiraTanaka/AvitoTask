@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -27,6 +28,8 @@ type tender struct {
 	CreatorUsername string `json:"creatorUsername" db:"creator_username"`
 }
 type tenderDto struct{}
+
+var ServiceTypesConst []string = []string{"Construction", "Delivery", "Manufacture"}
 
 func InitTenderRoutes(routes *gin.RouterGroup) {
 	tenderRoutes := routes.Group("/tenders")
@@ -54,6 +57,13 @@ func getTenders(c *gin.Context) {
 		offset = "0"
 	}
 	serviceTypes := c.QueryArray("service_type")
+	for _, serviceType := range serviceTypes {
+		if !slices.Contains(ServiceTypesConst, serviceType) {
+			error.GetInvalidServiceTypeError(c)
+			return
+		}
+
+	}
 
 	query := `
 		SELECT id,

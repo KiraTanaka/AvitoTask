@@ -1,0 +1,37 @@
+services:
+  app:
+    container_name: avitotask
+    build:
+      context: ./
+    environment:
+      - POSTGRES_HOST
+      - POSTGRES_PORT
+      - POSTGRES_DATABASE
+      - POSTGRES_USERNAME
+      - POSTGRES_PASSWORD
+    depends_on:
+      - postgres
+    ports:
+      - "8080:8080"
+    networks:
+      - avito-network
+
+  postgres:
+    image: "postgres:15-alpine"
+    ports:
+      - "6432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=$POSTGRES_DATABASE
+      - POSTGRES_USER=$POSTGRES_USERNAME
+      - POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+    networks:
+      - avito-network
+
+volumes:
+  db_data:
+    driver: local
+
+networks:
+  avito-network:

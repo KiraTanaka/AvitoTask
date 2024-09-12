@@ -2,17 +2,13 @@ package http
 
 import (
 	"database/sql"
-	"encoding/json"
 	"net/http"
-	"strconv"
-	"time"
 
 	validator "avitoTask/internal"
 	_ "avitoTask/internal/auth"
-	_ "avitoTask/internal/error"
+	"avitoTask/internal/error"
 
 	"github.com/gin-gonic/gin"
-	log "github.com/sirupsen/logrus"
 )
 
 type bid struct {
@@ -31,7 +27,7 @@ func InitBidRoutes(routes *gin.RouterGroup) {
 	bidRoutes := routes.Group("/bids")
 	//GET
 	bidRoutes.GET("/:tenderId/list", getBidsListTender)
-	bidRoutes.GET("/my", getUserBids)
+	/*bidRoutes.GET("/my", getUserBids)
 	bidRoutes.GET("/:bidId/status", getStatusBid)
 	//POST
 	bidRoutes.POST("/new", createBid)
@@ -39,7 +35,7 @@ func InitBidRoutes(routes *gin.RouterGroup) {
 	bidRoutes.PUT("/:bidId/status", changeStatusBid)
 	//bidRoutes.PUT("/:bidId/rollback/:version", rollbackVersionBid)
 	//PATCH
-	bidRoutes.PATCH("/:bidId/edit", editBid)
+	bidRoutes.PATCH("/:bidId/edit", editBid)*/
 	/*
 		bidRoutes.PUT("/:bidId/submit_decision", SubmitDecisionBid)
 		bidRoutes.PUT("/:bidId/feedback", feedbackBid)
@@ -99,6 +95,7 @@ func getBidsListTender(c *gin.Context) {
 	c.JSON(http.StatusOK, bids)
 }
 
+/*
 func getUserBids(c *gin.Context) {
 	c.Header("Content-Type", "application/json")
 
@@ -228,7 +225,7 @@ func changeStatusBid(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, InternalErrorBody{Reason: })
 			return
 		}
-	}()*/
+	}()
 	c.Header("Content-Type", "application/json")
 
 	status := c.Query("status")
@@ -264,14 +261,13 @@ func editBid(c *gin.Context) {
 	var tender tender
 	err := db.Get(&tender, "SELECT * FROM tender WHERE id = $1", tenderId)
 	if err != nil {
-		log.Error(err)
-		c.JSON(http.StatusBadRequest, InternalErrorBody{Reason: err.Error()})
+		error.GetInternalServerError(c, err)
 		return
 	}
 
 	err = c.BindJSON(&tender)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, InternalErrorBody{Reason: err.Error()})
+		error.GetInternalServerError(c, err)
 		return
 	}
 
@@ -288,14 +284,13 @@ func editBid(c *gin.Context) {
 	log.Info("RowsAffected and Error after comand:")
 	log.Info(resultDbQuery.RowsAffected())
 	if err != nil {
-		log.Error(err)
-		c.JSON(http.StatusInternalServerError, InternalErrorBody{Reason: err.Error()})
+		error.GetInternalServerError(c, err)
 		return
 	}
 	tx.Commit()
 
 	c.JSON(http.StatusOK, tender)
-}
+}*/ /*
 func rollbackVersionTEnder(c *gin.Context) {
 	nameFunc := "rollbackVersionTEnder"
 	c.Header("Content-Type", "application/json")
@@ -303,7 +298,8 @@ func rollbackVersionTEnder(c *gin.Context) {
 	version, err := strconv.Atoi(c.Param("version"))
 	if err != nil {
 		log.Error(nameFunc+"(converted to type int): ", err)
-		c.JSON(http.StatusBadRequest, InternalErrorBody{Reason: err.Error()})
+		error.GetInternalServerError(c, err)
+		//c.JSON(http.StatusBadRequest, InternalErrorBody{Reason: err.Error()})
 		return
 	}
 
@@ -311,19 +307,16 @@ func rollbackVersionTEnder(c *gin.Context) {
 					COALESCE(description,'') as description,
 					status,
 					service_type,
-					version 
+					version
 			FROM tender WHERE id = $1`
 
 	err = db.Get(&tender, query, tender.Id)
 	if err != nil {
-		log.Error(nameFunc+"(select tender): ", err)
-		c.JSON(http.StatusInternalServerError, InternalErrorBody{Reason: err.Error()})
+		error.GetInternalServerError(c, err)
 		return
 	}
 	if version >= tender.Version {
-		messageError := "Указанная версия больше или равна текущей версии тендера"
-		log.Error(nameFunc+": ", messageError)
-		c.JSON(http.StatusBadRequest, InternalErrorBody{messageError})
+		error.GetInternalServerError(c, err)
 		return
 	}
 
@@ -340,15 +333,13 @@ func rollbackVersionTEnder(c *gin.Context) {
 	var params string
 	err = db.Get(&params, "SELECT params FROM tender_version_hist2 WHERE tender_id = $1 and version = $2", tender.Id, version)
 	if err != nil {
-		log.Error(nameFunc+"(select params of tender version): ", err)
-		c.JSON(http.StatusInternalServerError, InternalErrorBody{Reason: err.Error()})
+		error.GetInternalServerError(c, err)
 		return
 	}
 	json.Unmarshal([]byte(params), &tender)
 	_, err = tx.NamedExec(query, &tender)
 	if err != nil {
-		log.Error(nameFunc, "(update tender): ", err)
-		c.JSON(http.StatusInternalServerError, InternalErrorBody{Reason: err.Error()})
+		error.GetInternalServerError(c, err)
 		return
 	}
 
@@ -356,3 +347,4 @@ func rollbackVersionTEnder(c *gin.Context) {
 
 	c.JSON(http.StatusOK, tender)
 }
+*/

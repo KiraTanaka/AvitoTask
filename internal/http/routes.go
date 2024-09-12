@@ -2,6 +2,7 @@ package http
 
 import (
 	_ "database/sql"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -13,10 +14,15 @@ func InitRoutes(conn *sqlx.DB) *gin.Engine {
 	db = conn
 	routes := gin.Default()
 	routeGroup := routes.Group("/api")
+	routeGroup.GET("/ping", Ping)
 
 	InitTenderRoutes(routeGroup)
-	//InitBidRouters(apiRoutes)
+	InitBidRoutes(routeGroup)
 
 	return routes
 
+}
+
+func Ping(c *gin.Context) {
+	c.JSON(http.StatusOK, "ok")
 }

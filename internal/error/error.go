@@ -23,6 +23,7 @@ var (
 	UserNotResponsibleOrganizationError   = InternalErrorBody{"Необходимо быть ответственным за организацию."}
 	InvalidVersionError                   = InternalErrorBody{"Указанная версия больше или равна текущей версии тендера."}
 	VersionNotFoundError                  = InternalErrorBody{"Версия не найдена."}
+	InvalidServiceTypeError               = InternalErrorBody{"Недопустимый вид услуги"}
 )
 
 // 400 (StatusBadRequest) - Данные неправильно сформированы или не соответствуют требованиям.
@@ -54,6 +55,11 @@ func GetOrganizationNotExistsOrIncorrectError(c *gin.Context) {
 func GetInvalidVersionError(c *gin.Context) {
 	log.Error(InvalidVersionError)
 	c.AbortWithStatusJSON(http.StatusBadRequest, InvalidVersionError)
+}
+
+func GetInvalidServiceTypeError(c *gin.Context) {
+	log.Error(InvalidServiceTypeError)
+	c.AbortWithStatusJSON(http.StatusBadRequest, InvalidServiceTypeError)
 }
 
 // 401 (StatusUnauthorized) - Пользователь не существует или некорректен.
