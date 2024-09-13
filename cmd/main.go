@@ -8,6 +8,9 @@ import (
 	"avitoTask/internal/auth"
 	"avitoTask/internal/http"
 
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
@@ -43,13 +46,6 @@ func main() {
 		log.Error(err)
 		return
 	}
-	fmt.Println(dbConfig.ServerAddress)
-	fmt.Println(dbConfig.Host)
-	fmt.Println(dbConfig.Port)
-	fmt.Println(dbConfig.User)
-	fmt.Println(dbConfig.Password)
-	fmt.Println(dbConfig.Dbname)
-	fmt.Println("new")
 
 	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s "+
 		"password=%s dbname=%s sslmode=disable",
@@ -57,13 +53,35 @@ func main() {
 
 	db, err := sqlx.Connect("postgres", psqlInfo)
 	if err != nil {
-		panic(err)
+		log.Error(err)
+		return
 	}
 	defer db.Close()
 
+	driver, err := postgres.WithInstance(db.DB, &postgres.Config{})
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	m, err := migrate.NewWithDatabaseInstance(
+		"file://./migrations",
+		"postgres",
+		driver,
+	)
+	if err != nil {
+		log.Error(err)
+		//return
+	}
+	err = m.Up()
+	if err != nil {
+		log.Error(err)
+		//return
+	}
+
 	err = db.Ping()
 	if err != nil {
-		panic(err)
+		log.Error(err)
 	}
 	auth.InitAuth(db)
 	validator.InitValidator(db)

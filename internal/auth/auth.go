@@ -63,13 +63,24 @@ func CheckUserViewBid(username, bidId string) error {
 				AND (b.status IN ('Created', 'Canceled') 
 						AND (author_type = 'User' AND EXISTS(SELECT 1
 															FROM employee emp
-															WHERE emp.id = b.author_id AND emp.username = 'test_user')
+															WHERE emp.id = b.author_id AND emp.username = $2)
 								OR b.author_type = 'Organization'
 									AND EXISTS(SELECT 1
 												FROM organization_responsible org_r
-													JOIN employee emp ON emp.id = org_r.user_id AND emp.username = 'test_user'
+													JOIN employee emp ON emp.id = org_r.user_id AND emp.username = $2
 												WHERE org_r.organization_id = b.author_id))
 					OR
 					b.status = 'Published') `
 	return db.Get(&canView, query, bidId, username)
+}
+func CheckUserCanApproveBid(username, tenderId string) error {
+	var canManage bool
+	log.Info("tenderId = " + tenderId)
+	log.Info("username = " + username)
+	query := `SELECT TRUE
+				FROM tender t
+					JOIN organization_responsible org_r ON org_r.organization_id = t.organization_id
+					JOIN employee emp ON emp.id = org_r.user_id AND emp.username = $2
+				WHERE t.id = $1`
+	return db.Get(&canManage, query, tenderId, username)
 }

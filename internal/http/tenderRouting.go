@@ -91,7 +91,7 @@ func getTenders(c *gin.Context) {
 
 	}
 
-	log.Info("Чтение")
+	log.Info("Чтение данных")
 	query := `
 		SELECT id,
 	       name,
@@ -142,18 +142,19 @@ func getUserTender(c *gin.Context) {
 	}
 
 	log.Info("Чтение")
-	query := `
-		SELECT id,
-			name,
-			COALESCE(description,'') as description,
-			status,
-			service_type,
-			version,
-			created_at
-		FROM tender
-		WHERE creator_username = $1
-		ORDER BY name
-		LIMIT $2 OFFSET $3`
+	query := `SELECT t.id,
+					t.name,
+					COALESCE(t.description, '') AS description,
+					t.status,
+					t.service_type,
+					t.version,
+					t.created_at
+				FROM tender t
+					JOIN organization_responsible org_r ON org_r.organization_id = t.organization_id
+					JOIN employee e ON org_r.user_id = e.id
+				WHERE e.username = $1
+				ORDER BY name
+						LIMIT $2 OFFSET $3`
 	var tenders []tenderDto
 	err = db.Select(&tenders, query, username, limit, offset)
 	if err != nil {
@@ -285,8 +286,7 @@ func createTender(c *gin.Context) {
 									$4,
 									$5,
 									$6,
-									$7,
-									$8)
+									$7)
 						RETURNING id`, someTender.Name, someTender.Description, someTender.ServiceType, someTender.Status, someTender.OrganizationId,
 		someTender.Version, someTender.CreatedAt).Scan(&lastInsertId)
 	if err != nil {

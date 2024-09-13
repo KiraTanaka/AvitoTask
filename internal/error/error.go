@@ -27,8 +27,10 @@ var (
 	VersionNotFoundError                        = InternalErrorBody{"Версия не найдена."}
 	InvalidServiceTypeError                     = InternalErrorBody{"Недопустимый вид услуги"}
 	InvalidStatusError                          = InternalErrorBody{"Недопустимый статус"}
+	InvalidDecisionError                        = InternalErrorBody{"Недопустимое решение"}
 	UserNotViewTenderError                      = InternalErrorBody{"Нельзя просматривать неопубликованные тендеры, если вы не ответственный за организацию."}
 	UserNotViewBidError                         = InternalErrorBody{"Нельзя просматривать неопубликованные предложения, если вы не ответственный за организацию или автор."}
+	DecisionNotPassedError                      = InternalErrorBody{"Решение должено быть указано."}
 )
 
 // 400 (StatusBadRequest) - Данные неправильно сформированы или не соответствуют требованиям.
@@ -74,6 +76,14 @@ func GetInvalidServiceTypeError(c *gin.Context) {
 func GetInvalidStatusError(c *gin.Context) {
 	log.Error(InvalidStatusError)
 	c.AbortWithStatusJSON(http.StatusBadRequest, InvalidStatusError)
+}
+func GetDecisionNotPassedError(c *gin.Context) {
+	log.Error(DecisionNotPassedError)
+	c.AbortWithStatusJSON(http.StatusBadRequest, DecisionNotPassedError)
+}
+func GetInvalidDecisionError(c *gin.Context) {
+	log.Error(InvalidDecisionError)
+	c.AbortWithStatusJSON(http.StatusBadRequest, InvalidDecisionError)
 }
 
 // 401 (StatusUnauthorized) - Пользователь не существует или некорректен.
