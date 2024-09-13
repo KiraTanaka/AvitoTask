@@ -12,20 +12,23 @@ type InternalErrorBody struct {
 }
 
 var (
-	UserNotPassedError                    = InternalErrorBody{"Пользователь должен быть указан."}
-	UserNotExistsOrIncorrectError         = InternalErrorBody{"Пользователь не существует или некорректен."}
-	OrganizationNotExistsOrIncorrectError = InternalErrorBody{"Организация не существует или некорректна."}
-	NewStatusNotPassedError               = InternalErrorBody{"Новый статус должен быть указан."}
-	TenderIdNotPassedError                = InternalErrorBody{"Идентификатор тендера должен быть указан."}
-	TenderNotFoundError                   = InternalErrorBody{"Указанный тендер не существует."}
-	BidIdNotPassedError                   = InternalErrorBody{"Идентификатор предложения должен быть указан."}
-	AuthorNotFoundError                   = InternalErrorBody{"Указанный автор не существует."}
-	UserNotResponsibleOrganizationError   = InternalErrorBody{"Необходимо быть ответственным за организацию."}
-	InvalidVersionError                   = InternalErrorBody{"Указанная версия больше или равна текущей версии тендера."}
-	VersionNotFoundError                  = InternalErrorBody{"Версия не найдена."}
-	InvalidServiceTypeError               = InternalErrorBody{"Недопустимый вид услуги"}
-	InvalidStatusError                    = InternalErrorBody{"Недопустимый статус"}
-	UserNotViewTender                     = InternalErrorBody{"Нельзя просматривать неопубликованные тендеры, если вы не ответственный за организацию."}
+	UserNotPassedError                          = InternalErrorBody{"Пользователь должен быть указан."}
+	UserNotExistsOrIncorrectError               = InternalErrorBody{"Пользователь не существует или некорректен."}
+	OrganizationNotExistsOrIncorrectError       = InternalErrorBody{"Организация не существует или некорректна."}
+	NewStatusNotPassedError                     = InternalErrorBody{"Новый статус должен быть указан."}
+	TenderIdNotPassedError                      = InternalErrorBody{"Идентификатор тендера должен быть указан."}
+	TenderNotFoundError                         = InternalErrorBody{"Указанный тендер не существует."}
+	BidNotFoundError                            = InternalErrorBody{"Указанное предложение не существует."}
+	BidIdNotPassedError                         = InternalErrorBody{"Идентификатор предложения должен быть указан."}
+	AuthorNotFoundError                         = InternalErrorBody{"Указанный автор не существует."}
+	UserNotResponsibleOrganizationError         = InternalErrorBody{"Необходимо быть ответственным за организацию."}
+	UserNotAuthorOrResponsibleOrganizationError = InternalErrorBody{"Необходимо быть автором или ответственным за организацию."}
+	InvalidVersionError                         = InternalErrorBody{"Указанная версия больше или равна текущей версии тендера."}
+	VersionNotFoundError                        = InternalErrorBody{"Версия не найдена."}
+	InvalidServiceTypeError                     = InternalErrorBody{"Недопустимый вид услуги"}
+	InvalidStatusError                          = InternalErrorBody{"Недопустимый статус"}
+	UserNotViewTenderError                      = InternalErrorBody{"Нельзя просматривать неопубликованные тендеры, если вы не ответственный за организацию."}
+	UserNotViewBidError                         = InternalErrorBody{"Нельзя просматривать неопубликованные предложения, если вы не ответственный за организацию или автор."}
 )
 
 // 400 (StatusBadRequest) - Данные неправильно сформированы или не соответствуют требованиям.
@@ -38,6 +41,10 @@ func GetInvalidRequestFormatOrParametersError(c *gin.Context, err error) {
 func GetNewStatusNotPassedError(c *gin.Context) {
 	log.Error(NewStatusNotPassedError)
 	c.AbortWithStatusJSON(http.StatusBadRequest, NewStatusNotPassedError)
+}
+func GetTenderIdNotPassedError(c *gin.Context) {
+	log.Error(TenderIdNotPassedError)
+	c.AbortWithStatusJSON(http.StatusBadRequest, TenderIdNotPassedError)
 }
 
 func GetBidIdNotPassedError(c *gin.Context) {
@@ -87,10 +94,18 @@ func GetUserNotResponsibleOrganizationError(c *gin.Context) {
 	log.Error(UserNotResponsibleOrganizationError)
 	c.AbortWithStatusJSON(http.StatusForbidden, UserNotResponsibleOrganizationError)
 }
+func GetUserNotAuthorOrResponsibleOrganizationError(c *gin.Context) {
+	log.Error(UserNotAuthorOrResponsibleOrganizationError)
+	c.AbortWithStatusJSON(http.StatusForbidden, UserNotAuthorOrResponsibleOrganizationError)
+}
 
-func GetUserNotViewTender(c *gin.Context) {
-	log.Error(UserNotViewTender)
-	c.AbortWithStatusJSON(http.StatusForbidden, UserNotViewTender)
+func GetUserNotViewTenderError(c *gin.Context) {
+	log.Error(UserNotViewTenderError)
+	c.AbortWithStatusJSON(http.StatusForbidden, UserNotViewTenderError)
+}
+func GetUserNotViewBidError(c *gin.Context) {
+	log.Error(UserNotViewBidError)
+	c.AbortWithStatusJSON(http.StatusForbidden, UserNotViewBidError)
 }
 
 // 404 (StatusNotFound) - Тендер или предложение не найдено.
@@ -102,6 +117,10 @@ func GetTenderNotFoundError(c *gin.Context) {
 func GetVersionNotFoundError(c *gin.Context) {
 	log.Error(VersionNotFoundError)
 	c.AbortWithStatusJSON(http.StatusNotFound, VersionNotFoundError)
+}
+func GetBidNotFoundError(c *gin.Context) {
+	log.Error(BidNotFoundError)
+	c.AbortWithStatusJSON(http.StatusNotFound, BidNotFoundError)
 }
 
 // 500 (StatusInternalServerError) - Сервер не готов обрабатывать запросы, если ответ статусом 500 или любой другой, кроме 200.

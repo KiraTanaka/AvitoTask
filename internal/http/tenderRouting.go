@@ -27,7 +27,7 @@ type tender struct {
 	Version         int    `json:"version" db:"version" binding:"required,min=1"`
 	OrganizationId  string `json:"organizationId" db:"organization_id" binding:"required,max=100"`
 	CreatedAt       string `json:"createdAt" db:"created_at" binding:"required"`
-	CreatorUsername string `json:"creatorUsername" db:"creator_username"`
+	CreatorUsername string `json:"creatorUsername"`
 }
 type tenderDto struct {
 	Id          string `json:"id" db:"id" binding:"max=100"`
@@ -117,6 +117,7 @@ func getTenders(c *gin.Context) {
 }
 
 func getUserTender(c *gin.Context) {
+	log.Info("Чтение параметров")
 	limit := c.Query("limit")
 	offset := c.Query("offset")
 	username := c.Query("username")
@@ -154,7 +155,7 @@ func getUserTender(c *gin.Context) {
 		ORDER BY name
 		LIMIT $2 OFFSET $3`
 	var tenders []tenderDto
-	err = db.Select(&tenders, query, c.Query("username"), limit, offset)
+	err = db.Select(&tenders, query, username, limit, offset)
 	if err != nil {
 		error.GetInternalServerError(c, err)
 		return
@@ -170,7 +171,7 @@ func getStatusTender(c *gin.Context) {
 
 	log.Info("Валидация")
 	if tenderId == "" {
-		error.GetTenderNotFoundError(c)
+		error.GetTenderIdNotPassedError(c)
 		return
 	}
 	if err := uuid.Validate(tenderId); err != nil {
@@ -203,7 +204,7 @@ func getStatusTender(c *gin.Context) {
 	log.Info("Авторизация")
 	err = auth.CheckUserViewTender(username, tenderId)
 	if err == sql.ErrNoRows {
-		error.GetUserNotViewTender(c)
+		error.GetUserNotViewTenderError(c)
 		return
 	} else if err != nil {
 		error.GetInternalServerError(c, err)
@@ -277,8 +278,7 @@ func createTender(c *gin.Context) {
 									status,
 									organization_id,
 									version,
-									created_at,
-									creator_username)
+									created_at)
 						VALUES     ($1,
 									$2,
 									$3,
@@ -288,7 +288,7 @@ func createTender(c *gin.Context) {
 									$7,
 									$8)
 						RETURNING id`, someTender.Name, someTender.Description, someTender.ServiceType, someTender.Status, someTender.OrganizationId,
-		someTender.Version, someTender.CreatedAt, someTender.CreatorUsername).Scan(&lastInsertId)
+		someTender.Version, someTender.CreatedAt).Scan(&lastInsertId)
 	if err != nil {
 		error.GetInternalServerError(c, err)
 		return
@@ -316,7 +316,7 @@ func changeStatusTender(c *gin.Context) {
 	}
 
 	if tenderId == "" {
-		error.GetTenderNotFoundError(c)
+		error.GetTenderIdNotPassedError(c)
 		return
 	}
 	if err := uuid.Validate(tenderId); err != nil {
@@ -411,7 +411,7 @@ func editTender(c *gin.Context) {
 
 	log.Info("Валидация")
 	if tenderId == "" {
-		error.GetTenderNotFoundError(c)
+		error.GetTenderIdNotPassedError(c)
 		return
 	}
 	if err := uuid.Validate(tenderId); err != nil {
@@ -427,6 +427,10 @@ func editTender(c *gin.Context) {
 		return
 	}
 
+	if username == "" {
+		error.GetUserNotPassedError(c)
+		return
+	}
 	err = validator.CheckUserExists(username)
 	if err == sql.ErrNoRows {
 		error.GetUserNotExistsOrIncorrectError(c)
@@ -492,6 +496,7 @@ func editTender(c *gin.Context) {
 		return
 	}
 	tx.Commit()
+
 	log.Info("Чтение данных")
 	err = db.Get(&tender, `SELECT id,
 								name,
@@ -517,7 +522,7 @@ func rollbackVersionTender(c *gin.Context) {
 
 	log.Info("Валидация")
 	if tenderId == "" {
-		error.GetTenderNotFoundError(c)
+		error.GetTenderIdNotPassedError(c)
 		return
 	}
 	if err := uuid.Validate(tenderId); err != nil {
@@ -566,9 +571,6 @@ func rollbackVersionTender(c *gin.Context) {
 	if err != nil {
 		error.GetInternalServerError(c, err)
 		return
-	} else if tender.Id == "" {
-		error.GetTenderNotFoundError(c)
-		return
 	}
 
 	log.Info("Авторизация")
@@ -596,11 +598,6 @@ func rollbackVersionTender(c *gin.Context) {
 		return
 	}
 	json.Unmarshal([]byte(params), &tender)
-
-	log.Info(tender.Name)
-	log.Info(tender.Description)
-	log.Info(tender.Status)
-	log.Info(tender.ServiceType)
 
 	log.Info("Изменение")
 	query := `UPDATE tender
