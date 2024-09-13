@@ -13,22 +13,33 @@ import (
 	"avitoTask/internal/error"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/lib/pq"
+	log "github.com/sirupsen/logrus"
 )
 
 type tender struct {
-	Id              string `json:"id" db:"id" binding:"max=100,uuid4"`
+	Id              string `json:"id" db:"id" binding:"max=100"`
 	Name            string `json:"name" db:"name" binding:"required,max=100"`
 	Description     string `json:"description" db:"description" binding:"required,max=500"`
 	ServiceType     string `json:"serviceType" db:"service_type" binding:"required,oneof=Construction Delivery Manufacture"`
 	Status          string `json:"status" db:"status" binding:"required,oneof=Created Published Closed"`
 	Version         int    `json:"version" db:"version" binding:"required,min=1"`
-	OrganizationId  string `json:"organizationId" db:"organization_id" binding:"required,max=100,uuid4"`
+	OrganizationId  string `json:"organizationId" db:"organization_id" binding:"required,max=100"`
 	CreatedAt       string `json:"createdAt" db:"created_at" binding:"required"`
 	CreatorUsername string `json:"creatorUsername" db:"creator_username"`
 }
-type tenderDto struct{}
+type tenderDto struct {
+	Id          string `json:"id" db:"id" binding:"max=100"`
+	Name        string `json:"name" db:"name" binding:"required,max=100"`
+	Description string `json:"description" db:"description" binding:"required,max=500"`
+	ServiceType string `json:"serviceType" db:"service_type" binding:"required,oneof=Construction Delivery Manufacture"`
+	Status      string `json:"status" db:"status" binding:"required,oneof=Created Published Closed"`
+	Version     int    `json:"version" db:"version" binding:"required,min=1"`
+	CreatedAt   string `json:"createdAt" db:"created_at" binding:"required"`
+}
 
+var StatusConst []string = []string{"Created", "Published", "Closed"}
 var ServiceTypesConst []string = []string{"Construction", "Delivery", "Manufacture"}
 
 func InitTenderRoutes(routes *gin.RouterGroup) {
@@ -47,12 +58,27 @@ func InitTenderRoutes(routes *gin.RouterGroup) {
 
 }
 
+func (t *tender) convertToDto() *tenderDto {
+	var tenderDto tenderDto
+	tenderDto.Id = t.Id
+	tenderDto.Name = t.Name
+	tenderDto.Description = t.Description
+	tenderDto.ServiceType = t.ServiceType
+	tenderDto.Status = t.Status
+	tenderDto.Version = t.Version
+	tenderDto.CreatedAt = t.CreatedAt
+	return &tenderDto
+}
+
 func getTenders(c *gin.Context) {
+	log.Info("Чтение параметров")
 	limit := c.Query("limit")
+	offset := c.Query("offset")
+
+	log.Info("Валидация")
 	if limit == "" {
 		limit = "5"
 	}
-	offset := c.Query("offset")
 	if offset == "" {
 		offset = "0"
 	}
@@ -65,6 +91,7 @@ func getTenders(c *gin.Context) {
 
 	}
 
+	log.Info("Чтение")
 	query := `
 		SELECT id,
 	       name,
@@ -79,7 +106,7 @@ func getTenders(c *gin.Context) {
 		ORDER BY name
 		LIMIT $3 OFFSET $4`
 
-	var tenders []tender
+	var tenders []tenderDto
 	err := db.Select(&tenders, query, pq.Array(serviceTypes), len(serviceTypes), limit, offset)
 	if err != nil {
 		error.GetInternalServerError(c, err)
@@ -93,6 +120,7 @@ func getUserTender(c *gin.Context) {
 	limit := c.Query("limit")
 	offset := c.Query("offset")
 	username := c.Query("username")
+	log.Info("Валидация")
 	if limit == "" {
 		limit = "5"
 	}
@@ -112,6 +140,7 @@ func getUserTender(c *gin.Context) {
 		return
 	}
 
+	log.Info("Чтение")
 	query := `
 		SELECT id,
 			name,
@@ -124,7 +153,7 @@ func getUserTender(c *gin.Context) {
 		WHERE creator_username = $1
 		ORDER BY name
 		LIMIT $2 OFFSET $3`
-	var tenders []tender
+	var tenders []tenderDto
 	err = db.Select(&tenders, query, c.Query("username"), limit, offset)
 	if err != nil {
 		error.GetInternalServerError(c, err)
@@ -135,11 +164,17 @@ func getUserTender(c *gin.Context) {
 }
 
 func getStatusTender(c *gin.Context) {
+	log.Info("Чтение параметров")
 	tenderId := c.Param("tenderId")
 	username := c.Query("username")
 
+	log.Info("Валидация")
 	if tenderId == "" {
 		error.GetTenderNotFoundError(c)
+		return
+	}
+	if err := uuid.Validate(tenderId); err != nil {
+		error.GetInvalidRequestFormatOrParametersError(c, err)
 		return
 	}
 	if username == "" {
@@ -165,6 +200,17 @@ func getStatusTender(c *gin.Context) {
 		return
 	}
 
+	log.Info("Авторизация")
+	err = auth.CheckUserViewTender(username, tenderId)
+	if err == sql.ErrNoRows {
+		error.GetUserNotViewTender(c)
+		return
+	} else if err != nil {
+		error.GetInternalServerError(c, err)
+		return
+	}
+
+	log.Info("Чтение данных")
 	var status string
 	err = db.Get(&status, "SELECT status FROM tender WHERE id = $1", tenderId)
 	if err != nil {
@@ -175,9 +221,15 @@ func getStatusTender(c *gin.Context) {
 }
 
 func createTender(c *gin.Context) {
-	someTender := tender{Version: 1, CreatedAt: time.RFC3339, Status: "Created"}
+	log.Info("Чтение параметров")
+	someTender := tender{Version: 1, CreatedAt: time.Now().Format(time.RFC3339), Status: "Created"}
 	err := c.BindJSON(&someTender)
 	if err != nil {
+		error.GetInvalidRequestFormatOrParametersError(c, err)
+		return
+	}
+	log.Info("Валидация")
+	if err := uuid.Validate(someTender.OrganizationId); err != nil {
 		error.GetInvalidRequestFormatOrParametersError(c, err)
 		return
 	}
@@ -200,16 +252,17 @@ func createTender(c *gin.Context) {
 		return
 	}
 
-	//Проверка прав на создание
-	isResponsibleOrganization, err := auth.CheckUserIsResponsibleOrganization(someTender.CreatorUsername, someTender.OrganizationId)
-	if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	} else if !isResponsibleOrganization {
+	log.Info("Авторизация")
+	err = auth.CheckUserCanManageTender(someTender.CreatorUsername, someTender.OrganizationId)
+	if err == sql.ErrNoRows {
 		error.GetUserNotResponsibleOrganizationError(c)
+		return
+	} else if err != nil {
+		error.GetInternalServerError(c, err)
 		return
 	}
 
+	log.Info("Создание")
 	var lastInsertId string
 	tx, err := db.Beginx()
 	if err != nil {
@@ -223,17 +276,19 @@ func createTender(c *gin.Context) {
 									service_type,
 									status,
 									organization_id,
-									version
-									created_at)
+									version,
+									created_at,
+									creator_username)
 						VALUES     ($1,
 									$2,
 									$3,
 									$4,
 									$5,
 									$6,
-									$7)
+									$7,
+									$8)
 						RETURNING id`, someTender.Name, someTender.Description, someTender.ServiceType, someTender.Status, someTender.OrganizationId,
-		someTender.Version, someTender.CreatedAt).Scan(&lastInsertId)
+		someTender.Version, someTender.CreatedAt, someTender.CreatorUsername).Scan(&lastInsertId)
 	if err != nil {
 		error.GetInternalServerError(c, err)
 		return
@@ -241,28 +296,47 @@ func createTender(c *gin.Context) {
 	tx.Commit()
 	someTender.Id = lastInsertId
 
-	c.JSON(http.StatusOK, someTender)
+	c.JSON(http.StatusOK, someTender.convertToDto())
 }
 
 func changeStatusTender(c *gin.Context) {
+	log.Info("Чтение параметров")
 	status := c.Query("status")
 	username := c.Query("username")
 	tenderId := c.Param("tenderId")
 
+	log.Info("Валидация")
 	if status == "" {
 		error.GetNewStatusNotPassedError(c)
 		return
 	}
+	if !slices.Contains(StatusConst, status) {
+		error.GetInvalidStatusError(c)
+		return
+	}
+
 	if tenderId == "" {
 		error.GetTenderNotFoundError(c)
 		return
 	}
+	if err := uuid.Validate(tenderId); err != nil {
+		error.GetInvalidRequestFormatOrParametersError(c, err)
+		return
+	}
+	err := validator.CheckTenderExists(tenderId)
+	if err == sql.ErrNoRows {
+		error.GetTenderNotFoundError(c)
+		return
+	} else if err != nil {
+		error.GetInternalServerError(c, err)
+		return
+	}
+
 	if username == "" {
 		error.GetUserNotPassedError(c)
 		return
 	}
-
-	err := validator.CheckUserExists(username)
+	err = validator.CheckUserExists(username)
 	if err == sql.ErrNoRows {
 		error.GetUserNotExistsOrIncorrectError(c)
 		return
@@ -271,60 +345,14 @@ func changeStatusTender(c *gin.Context) {
 		return
 	}
 
-	tx, err := db.Beginx()
-	if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}
-	defer tx.Rollback()
-	_, err = tx.Exec("UPDATE tender SET status = $1 WHERE id = $2", c.Query("status"), c.Param("tender_id"))
-	if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}
-	tx.Commit()
-
+	log.Info("Чтение данных")
 	var tender tender
 	err = db.Get(&tender, `SELECT id,
 								name,
 								COALESCE(description,'') as description,
 								status,
 								service_type,
-								version,
-								created_at
-							FROM tender
-							WHERE id = $1`, tenderId)
-	if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}
-
-	c.JSON(http.StatusOK, tender)
-}
-
-func editTender(c *gin.Context) {
-	tenderId := c.Param("tenderId")
-	username := c.Query("username")
-	if tenderId == "" {
-		error.GetTenderNotFoundError(c)
-		return
-	}
-
-	err := validator.CheckUserExists(username)
-	if err == sql.ErrNoRows {
-		error.GetUserNotExistsOrIncorrectError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}
-
-	var tender tender
-	err = db.Get(&tender, `SELECT id,
-								name,
-								COALESCE(description,'') as description,
-								status,
-								service_type,
+								organization_id,
 								version,
 								created_at
 							FROM tender WHERE id = $1`, tenderId)
@@ -333,13 +361,94 @@ func editTender(c *gin.Context) {
 		return
 	}
 
-	//Проверка прав на редактирование
-	isResponsibleOrganization, err := auth.CheckUserIsResponsibleOrganization(username, tender.OrganizationId)
+	log.Info("Авторизация")
+	err = auth.CheckUserCanManageTender(username, tender.OrganizationId)
+	if err == sql.ErrNoRows {
+		error.GetUserNotResponsibleOrganizationError(c)
+		return
+	} else if err != nil {
+		error.GetInternalServerError(c, err)
+		return
+	}
+
+	log.Info("Изменение")
+	tx, err := db.Beginx()
 	if err != nil {
 		error.GetInternalServerError(c, err)
 		return
-	} else if !isResponsibleOrganization {
-		error.GetUserNotResponsibleOrganizationError(c)
+	}
+	defer tx.Rollback()
+	_, err = tx.Exec("UPDATE tender SET status = $1 WHERE id = $2", status, tender.Id)
+	if err != nil {
+		error.GetInternalServerError(c, err)
+		return
+	}
+	tx.Commit()
+
+	log.Info("Чтение данных")
+	err = db.Get(&tender, `SELECT id,
+								name,
+								COALESCE(description,'') as description,
+								status,
+								service_type,
+								organization_id,
+								version,
+								created_at
+							FROM tender
+							WHERE id = $1`, tender.Id)
+	if err != nil {
+		error.GetInternalServerError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, tender.convertToDto())
+}
+
+func editTender(c *gin.Context) {
+	log.Info("Чтение параметров")
+	tenderId := c.Param("tenderId")
+	username := c.Query("username")
+
+	log.Info("Валидация")
+	if tenderId == "" {
+		error.GetTenderNotFoundError(c)
+		return
+	}
+	if err := uuid.Validate(tenderId); err != nil {
+		error.GetInvalidRequestFormatOrParametersError(c, err)
+		return
+	}
+	err := validator.CheckTenderExists(tenderId)
+	if err == sql.ErrNoRows {
+		error.GetTenderNotFoundError(c)
+		return
+	} else if err != nil {
+		error.GetInternalServerError(c, err)
+		return
+	}
+
+	err = validator.CheckUserExists(username)
+	if err == sql.ErrNoRows {
+		error.GetUserNotExistsOrIncorrectError(c)
+		return
+	} else if err != nil {
+		error.GetInternalServerError(c, err)
+		return
+	}
+
+	log.Info("Чтение данных")
+	var tender tender
+	err = db.Get(&tender, `SELECT id,
+								name,
+								COALESCE(description,'') as description,
+								status,
+								service_type,
+								organization_id,
+								version,
+								created_at
+							FROM tender WHERE id = $1`, tenderId)
+	if err != nil {
+		error.GetInternalServerError(c, err)
 		return
 	}
 
@@ -348,7 +457,22 @@ func editTender(c *gin.Context) {
 		error.GetInvalidRequestFormatOrParametersError(c, err)
 		return
 	}
+	if !slices.Contains(ServiceTypesConst, tender.ServiceType) {
+		error.GetInvalidServiceTypeError(c)
+		return
+	}
 
+	log.Info("Авторизация")
+	err = auth.CheckUserCanManageTender(username, tender.OrganizationId)
+	if err == sql.ErrNoRows {
+		error.GetUserNotResponsibleOrganizationError(c)
+		return
+	} else if err != nil {
+		error.GetInternalServerError(c, err)
+		return
+	}
+
+	log.Info("Изменение")
 	query := `UPDATE tender
 				SET    name = :name,
 						description = :description,
@@ -368,12 +492,13 @@ func editTender(c *gin.Context) {
 		return
 	}
 	tx.Commit()
-
+	log.Info("Чтение данных")
 	err = db.Get(&tender, `SELECT id,
 								name,
 								COALESCE(description,'') as description,
 								status,
 								service_type,
+								organization_id,
 								version,
 								created_at
 							FROM tender
@@ -383,25 +508,41 @@ func editTender(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, tender)
+	c.JSON(http.StatusOK, tender.convertToDto())
 }
 func rollbackVersionTender(c *gin.Context) {
+	log.Info("Чтение параметров")
 	tenderId := c.Param("tenderId")
 	username := c.Query("username")
+
+	log.Info("Валидация")
 	if tenderId == "" {
 		error.GetTenderNotFoundError(c)
 		return
 	}
+	if err := uuid.Validate(tenderId); err != nil {
+		error.GetInvalidRequestFormatOrParametersError(c, err)
+		return
+	}
+	err := validator.CheckTenderExists(tenderId)
+	if err == sql.ErrNoRows {
+		error.GetTenderNotFoundError(c)
+		return
+	} else if err != nil {
+		error.GetInternalServerError(c, err)
+		return
+	}
+
 	version, err := strconv.Atoi(c.Param("version"))
 	if err != nil {
 		error.GetInvalidRequestFormatOrParametersError(c, err)
 		return
 	}
+
 	if username == "" {
 		error.GetUserNotPassedError(c)
 		return
 	}
-
 	err = validator.CheckUserExists(username)
 	if err == sql.ErrNoRows {
 		error.GetUserNotExistsOrIncorrectError(c)
@@ -411,12 +552,14 @@ func rollbackVersionTender(c *gin.Context) {
 		return
 	}
 
+	log.Info("Чтение данных")
 	var tender tender
 	err = db.Get(&tender, `SELECT id,
 								name,
 								COALESCE(description,'') as description,
 								status,
 								service_type,
+								organization_id,
 								version,
 								created_at
 							FROM tender WHERE id = $1`, tenderId)
@@ -428,13 +571,13 @@ func rollbackVersionTender(c *gin.Context) {
 		return
 	}
 
-	//Проверка прав на откат
-	isResponsibleOrganization, err := auth.CheckUserIsResponsibleOrganization(username, tender.OrganizationId)
-	if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	} else if !isResponsibleOrganization {
+	log.Info("Авторизация")
+	err = auth.CheckUserCanManageTender(username, tender.OrganizationId)
+	if err == sql.ErrNoRows {
 		error.GetUserNotResponsibleOrganizationError(c)
+		return
+	} else if err != nil {
+		error.GetInternalServerError(c, err)
 		return
 	}
 
@@ -443,14 +586,7 @@ func rollbackVersionTender(c *gin.Context) {
 		return
 	}
 
-	query := `UPDATE tender
-				SET    name = :name,
-						description = :description,
-						service_type = :service_type,
-				WHERE  id = :id`
-
-	tx := db.MustBegin()
-
+	log.Info("Чтение данных")
 	var params string
 	err = db.Get(&params, `SELECT params 
 							FROM tender_version_hist 
@@ -459,16 +595,43 @@ func rollbackVersionTender(c *gin.Context) {
 		error.GetVersionNotFoundError(c)
 		return
 	}
-
 	json.Unmarshal([]byte(params), &tender)
 
+	log.Info(tender.Name)
+	log.Info(tender.Description)
+	log.Info(tender.Status)
+	log.Info(tender.ServiceType)
+
+	log.Info("Изменение")
+	query := `UPDATE tender
+				SET    name = :name,
+						description = :description,
+						service_type = :service_type
+				WHERE  id = :id`
+
+	tx := db.MustBegin()
 	_, err = tx.NamedExec(query, &tender)
 	if err != nil {
 		error.GetInternalServerError(c, err)
 		return
 	}
-
 	tx.Commit()
 
-	c.JSON(http.StatusOK, tender)
+	log.Info("Чтение данных")
+	err = db.Get(&tender, `SELECT id,
+								name,
+								COALESCE(description,'') as description,
+								status,
+								service_type,
+								organization_id,
+								version,
+								created_at
+							FROM tender
+							WHERE id = $1`, tenderId)
+	if err != nil {
+		error.GetInternalServerError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, tender.convertToDto())
 }

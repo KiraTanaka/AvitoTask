@@ -4,6 +4,7 @@ services:
     build:
       context: ./
     environment:
+      - SERVER_ADDRESS
       - POSTGRES_HOST
       - POSTGRES_PORT
       - POSTGRES_DATABASE

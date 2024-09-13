@@ -24,6 +24,8 @@ var (
 	InvalidVersionError                   = InternalErrorBody{"Указанная версия больше или равна текущей версии тендера."}
 	VersionNotFoundError                  = InternalErrorBody{"Версия не найдена."}
 	InvalidServiceTypeError               = InternalErrorBody{"Недопустимый вид услуги"}
+	InvalidStatusError                    = InternalErrorBody{"Недопустимый статус"}
+	UserNotViewTender                     = InternalErrorBody{"Нельзя просматривать неопубликованные тендеры, если вы не ответственный за организацию."}
 )
 
 // 400 (StatusBadRequest) - Данные неправильно сформированы или не соответствуют требованиям.
@@ -62,6 +64,11 @@ func GetInvalidServiceTypeError(c *gin.Context) {
 	c.AbortWithStatusJSON(http.StatusBadRequest, InvalidServiceTypeError)
 }
 
+func GetInvalidStatusError(c *gin.Context) {
+	log.Error(InvalidStatusError)
+	c.AbortWithStatusJSON(http.StatusBadRequest, InvalidStatusError)
+}
+
 // 401 (StatusUnauthorized) - Пользователь не существует или некорректен.
 
 func GetUserNotPassedError(c *gin.Context) {
@@ -79,6 +86,11 @@ func GetUserNotExistsOrIncorrectError(c *gin.Context) {
 func GetUserNotResponsibleOrganizationError(c *gin.Context) {
 	log.Error(UserNotResponsibleOrganizationError)
 	c.AbortWithStatusJSON(http.StatusForbidden, UserNotResponsibleOrganizationError)
+}
+
+func GetUserNotViewTender(c *gin.Context) {
+	log.Error(UserNotViewTender)
+	c.AbortWithStatusJSON(http.StatusForbidden, UserNotViewTender)
 }
 
 // 404 (StatusNotFound) - Тендер или предложение не найдено.

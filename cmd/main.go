@@ -14,27 +14,36 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+/*
+const (
+
+	host     string = "localhost"
+	dbname   string = "postgres"
+	port     int    = 5432
+	user     string = "postgres"
+	password string = "1"
+
+)
+*/
 type DbConfig struct {
-	/*host     = "localhost"
-	port     = 5432
-	user     = "postgres"
-	password = "1"
-	dbname   = "postgres"*/
-	Host     string `env:"POSTGRES_HOST" env-required:"true"`
-	Port     int    `env:"POSTGRES_PORT" env-required:"true"`
-	Dbname   string `env:"POSTGRES_DATABASE" env-required:"true"`
-	User     string `env:"POSTGRES_USERNAME" env-required:"true"`
-	Password string `env:"POSTGRES_PASSWORD" env-required:"true"`
+	ServerAddress string `env:"SERVER_ADDRESS" env-required:"true"`
+	Host          string `env:"POSTGRES_HOST" env-required:"true"`
+	Port          int    `env:"POSTGRES_PORT" env-required:"true"`
+	Dbname        string `env:"POSTGRES_DATABASE" env-required:"true"`
+	User          string `env:"POSTGRES_USERNAME" env-required:"true"`
+	Password      string `env:"POSTGRES_PASSWORD" env-required:"true"`
 }
 
-var db *sqlx.DB
-
 func main() {
+	/*psqlInfo := fmt.Sprintf("host=%s port=%d user=%s "+
+	"password=%s dbname=%s sslmode=disable",
+	host, port, user, password, dbname)*/
 	dbConfig, err := ReadDbConfig()
 	if err != nil {
 		log.Error(err)
 		return
 	}
+	fmt.Println(dbConfig.ServerAddress)
 	fmt.Println(dbConfig.Host)
 	fmt.Println(dbConfig.Port)
 	fmt.Println(dbConfig.User)
@@ -45,6 +54,7 @@ func main() {
 	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s "+
 		"password=%s dbname=%s sslmode=disable",
 		dbConfig.Host, dbConfig.Port, dbConfig.User, dbConfig.Password, dbConfig.Dbname)
+
 	db, err := sqlx.Connect("postgres", psqlInfo)
 	if err != nil {
 		panic(err)
@@ -59,12 +69,13 @@ func main() {
 	validator.InitValidator(db)
 	routes := http.InitRoutes(db)
 
-	routes.Run("avitotask:8080")
+	routes.Run(dbConfig.ServerAddress)
 }
 
 func ReadDbConfig() (*DbConfig, error) {
 	var dbconfig DbConfig
-	if err := cleanenv.ReadEnv(&dbconfig); err != nil {
+	err := cleanenv.ReadEnv(&dbconfig)
+	if err != nil {
 		return nil, fmt.Errorf("DB config error: %w\n", err)
 	}
 	return &dbconfig, nil
