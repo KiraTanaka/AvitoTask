@@ -17,17 +17,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-/*
-const (
-
-	host     string = "localhost"
-	dbname   string = "postgres"
-	port     int    = 5432
-	user     string = "postgres"
-	password string = "1"
-
-)
-*/
 type DbConfig struct {
 	ServerAddress string `env:"SERVER_ADDRESS" env-required:"true"`
 	Host          string `env:"POSTGRES_HOST" env-required:"true"`
@@ -38,9 +27,7 @@ type DbConfig struct {
 }
 
 func main() {
-	/*psqlInfo := fmt.Sprintf("host=%s port=%d user=%s "+
-	"password=%s dbname=%s sslmode=disable",
-	host, port, user, password, dbname)*/
+
 	dbConfig, err := ReadDbConfig()
 	if err != nil {
 		log.Error(err)
@@ -58,6 +45,12 @@ func main() {
 	}
 	defer db.Close()
 
+	err = db.Ping()
+	if err != nil {
+		log.Error(err)
+	}
+	log.Info("Connection to the database is completed.")
+
 	driver, err := postgres.WithInstance(db.DB, &postgres.Config{})
 	if err != nil {
 		log.Error(err)
@@ -71,18 +64,13 @@ func main() {
 	)
 	if err != nil {
 		log.Error(err)
-		//return
 	}
 	err = m.Up()
 	if err != nil {
 		log.Error(err)
-		//return
 	}
+	log.Info("Verification and application of missing migrations is completed.")
 
-	err = db.Ping()
-	if err != nil {
-		log.Error(err)
-	}
 	auth.InitAuth(db)
 	validator.InitValidator(db)
 	routes := http.InitRoutes(db)
@@ -94,7 +82,7 @@ func ReadDbConfig() (*DbConfig, error) {
 	var dbconfig DbConfig
 	err := cleanenv.ReadEnv(&dbconfig)
 	if err != nil {
-		return nil, fmt.Errorf("DB config error: %w\n", err)
+		return nil, fmt.Errorf("DB config error: %w", err)
 	}
 	return &dbconfig, nil
 }

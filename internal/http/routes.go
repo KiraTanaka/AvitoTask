@@ -13,8 +13,10 @@ var db *sqlx.DB
 func InitRoutes(conn *sqlx.DB) *gin.Engine {
 	db = conn
 	routes := gin.Default()
+
+	routes.GET("/", hello)
 	routeGroup := routes.Group("/api")
-	routeGroup.GET("/ping", Ping)
+	routeGroup.GET("/ping", ping)
 
 	InitTenderRoutes(routeGroup)
 	InitBidRoutes(routeGroup)
@@ -22,7 +24,10 @@ func InitRoutes(conn *sqlx.DB) *gin.Engine {
 	return routes
 
 }
+func hello(c *gin.Context) {
+	c.JSON(http.StatusOK, "hello")
+}
 
-func Ping(c *gin.Context) {
+func ping(c *gin.Context) {
 	c.JSON(http.StatusOK, "ok")
 }

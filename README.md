@@ -1,30 +1,55 @@
-## Структура проекта
-В данном проекте находится типовой пример для сборки приложения в докере из находящящегося в проекте Dockerfile. Пример на Gradle используется исключительно в качестве шаблона, вы можете переписать проект как вам хочется - главное, что бы Dockerfile находился в корне проекта и приложение отвечало по порту 8080. Других требований нет.
+Для запуска проекта необходимо установить переменные окружения:
+- `SERVER_ADDRESS` — адрес и порт, который будет слушать HTTP сервер при запуске. Пример: 0.0.0.0:8080.
+- `POSTGRES_USERNAME` — имя пользователя для подключения к PostgreSQL.
+- `POSTGRES_PASSWORD` — пароль для подключения к PostgreSQL.
+- `POSTGRES_HOST` — хост для подключения к PostgreSQL (например, host.docker.internal).
+- `POSTGRES_PORT` — порт для подключения к PostgreSQL (например, 5432).
+- `POSTGRES_DATABASE` — имя базы данных PostgreSQL, которую будет использовать приложение.
 
-## Задание
-В папке "задание" размещена задача.
-
-## Сбор и развертывание приложения
-Приложение должно отвечать по порту `8080` (жестко задано в настройках деплоя). После деплоя оно будет доступно по адресу: `https://<имя_проекта>-<уникальный_идентификатор_группы_группы>.avito2024.codenrock.com`
-
-Пример: Для кода из репозитория `/avito2024/cnrprod-team-27437/task1` сформируется домен
-
+Выполнить команды:
 ```
-task1-5447.avito2024.codenrock.com
-```
+ docker build -t <имя образа> .
+ docker run -d -p 8080:8080 --name <имя контейнера> --env-file <путь до файла с переменными окружения> <имя образа>
+ ```
 
-**Для удобства домен указывается в логе сборки**
+## Логика приложения
 
-Логи сборки проекта находятся на вкладке **CI/CD** -> **Jobs**.
+При развертывании приложения накатываются миграции в бд со следующими объектами:
+- **Таблицы**:
+  - tender
+  - tender_version_hist
+  - bid
+  - bid_version_hist
+  - bid_decision
+- **Типы**:
+  - service_type
+  - tender_status
+  - bid_author_type
+  - bid_decision_type
+  - bid_status
+- **Триггерные функции**:
+  - tender_version_hist_update_trigger_func
+  - bid_version_hist_update_trigger_func
 
-Ссылка на собранный проект находится на вкладке **Deployments** -> **Environment**. Вы можете сразу открыть URL по кнопке "Open".
-
-## Доступ к сервисам
-
-### Kubernetes
-На вашу команду выделен kubernetes namespace. Для подключения к нему используйте утилиту `kubectl` и `*.kube.config` файл, который вам выдадут организаторы.
-
-Состояние namespace, работающие pods и логи приложений можно посмотреть по адресу [https://dashboard.avito2024.codenrock.com/](https://dashboard.avito2024.codenrock.com/). Для открытия дашборда необходимо выбрать авторизацию через Kubeconfig и указать путь до выданного вам `*.kube.config` файла
-
-
-
+Данный проект реализует следующие эндпоинты:
+- **GET**:
+  - /
+  - /api/ping
+  - /api/tenders/
+  - /api/tenders/my
+  - /api/tenders/:tenderId/status
+  - /api/bids/:id/list
+  - /api/bids/my
+  - /api/bids/:id/status
+- **POST**:
+  - /api/tenders/new
+  - /api/bids/new
+- **PUT**:
+  - /api/tenders/:tenderId/status
+  - /api/tenders/:tenderId/rollback/:version
+  - /api/bids/:id/status
+  - /api/bids/:id/rollback/:version
+  - /api/bids/:id/submit_decision (Расширенный процесс согласования)
+- **PATCH**:
+  - /api/tenders/:tenderId/edit
+  - /api/bids/:id/edit

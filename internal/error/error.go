@@ -31,6 +31,8 @@ var (
 	UserNotViewTenderError                      = InternalErrorBody{"Нельзя просматривать неопубликованные тендеры, если вы не ответственный за организацию."}
 	UserNotViewBidError                         = InternalErrorBody{"Нельзя просматривать неопубликованные предложения, если вы не ответственный за организацию или автор."}
 	DecisionNotPassedError                      = InternalErrorBody{"Решение должено быть указано."}
+	BidAlreadyHasDecisionError                  = InternalErrorBody{"Решение по предложению уже принято."}
+	UserHasDecisionForBidError                  = InternalErrorBody{"Вы уже приняли решение по предложению."}
 )
 
 // 400 (StatusBadRequest) - Данные неправильно сформированы или не соответствуют требованиям.
@@ -84,6 +86,16 @@ func GetDecisionNotPassedError(c *gin.Context) {
 func GetInvalidDecisionError(c *gin.Context) {
 	log.Error(InvalidDecisionError)
 	c.AbortWithStatusJSON(http.StatusBadRequest, InvalidDecisionError)
+}
+
+func GetBidAlreadyHasDecisionError(c *gin.Context) {
+	log.Error(BidAlreadyHasDecisionError)
+	c.AbortWithStatusJSON(http.StatusBadRequest, BidAlreadyHasDecisionError)
+}
+
+func GetUserHasDecisionForBidError(c *gin.Context) {
+	log.Error(UserHasDecisionForBidError)
+	c.AbortWithStatusJSON(http.StatusBadRequest, UserHasDecisionForBidError)
 }
 
 // 401 (StatusUnauthorized) - Пользователь не существует или некорректен.

@@ -18,17 +18,17 @@ import (
 )
 
 type bid struct {
-	Id              string `json:"id" db:"id" binding:"max=100"`
-	Name            string `json:"name" db:"name" binding:"required,max=100"`
-	Description     string `json:"description" db:"description" binding:"required,max=500"`
-	Status          string `json:"status" db:"status" binding:"required,oneof=Created Published Canceled"`
-	TenderId        string `json:"tenderId" db:"tender_id" binding:"required,max=100"`
-	AuthorType      string `json:"authorType" db:"author_type" binding:"required,max=100,oneof=Organization User"`
-	AuthorId        string `json:"authorId" db:"author_id" binding:"required,max=100"`
-	Version         int    `json:"version" db:"version" binding:"required,min=1"`
-	CreatedAt       string `json:"createdAt" db:"created_at" binding:"required"`
-	Decision        string `json:"decision" db:"decision" `
-	CreatorUsername string `json:"creatorUsername"`
+	Id              string  `json:"id" db:"id" binding:"max=100"`
+	Name            string  `json:"name" db:"name" binding:"required,max=100"`
+	Description     string  `json:"description" db:"description" binding:"required,max=500"`
+	Status          string  `json:"status" db:"status" binding:"required,oneof=Created Published Canceled"`
+	TenderId        string  `json:"tenderId" db:"tender_id" binding:"required,max=100"`
+	AuthorType      string  `json:"authorType" db:"author_type" binding:"required,max=100,oneof=Organization User"`
+	AuthorId        string  `json:"authorId" db:"author_id" binding:"required,max=100"`
+	Version         int     `json:"version" db:"version" binding:"required,min=1"`
+	CreatedAt       string  `json:"createdAt" db:"created_at" binding:"required"`
+	Decision        *string `json:"decision" db:"decision"`
+	CreatorUsername string  `json:"creatorUsername"`
 }
 
 type bidDto struct {
@@ -57,17 +57,17 @@ const Quorum int = 3
 func InitBidRoutes(routes *gin.RouterGroup) {
 	bidRoutes := routes.Group("/bids")
 	//GET
-	bidRoutes.GET("/:Id/list", getBidsListTender)
+	bidRoutes.GET("/:id/list", getBidsListTender)
 	bidRoutes.GET("/my", getUserBids)
-	bidRoutes.GET("/:Id/status", getStatusBid)
+	bidRoutes.GET("/:id/status", getStatusBid)
 	//POST
 	bidRoutes.POST("/new", createBid)
 	//PUT
-	bidRoutes.PUT("/:Id/status", changeStatusBid)
-	bidRoutes.PUT("/:Id/rollback/:version", rollbackVersionBid)
-	bidRoutes.PUT("/:Id/submit_decision", SubmitDecisionBid)
+	bidRoutes.PUT("/:id/status", changeStatusBid)
+	bidRoutes.PUT("/:id/rollback/:version", rollbackVersionBid)
+	bidRoutes.PUT("/:id/submit_decision", SubmitDecisionBid)
 	//PATCH
-	bidRoutes.PATCH("/:Id/edit", editBid)
+	bidRoutes.PATCH("/:id/edit", editBid)
 	/*	bidRoutes.PUT("/:bidId/feedback", feedbackBid)
 		bidRoutes.GET("/:tenderId/reviews", getReviewsOfBid)
 	*/
@@ -736,10 +736,30 @@ func SubmitDecisionBid(c *gin.Context) {
 								author_type,
 								author_id,
 								version,
-								created_at
+								created_at,
+								decision
 							FROM bid WHERE id = $1`, bidId)
 	if err != nil {
 		error.GetInternalServerError(c, err)
+		return
+	}
+
+	if bid.Decision != nil {
+		error.GetBidAlreadyHasDecisionError(c)
+		return
+	}
+
+	var decisionCnt int
+	err = db.Get(&decisionCnt, `SELECT COUNT(*)
+							FROM bid_decision
+							WHERE bid_id = $1 AND username=$2`,
+		bid.Id, username)
+	if err != nil {
+		error.GetInternalServerError(c, err)
+		return
+	}
+	if decisionCnt >= 1 {
+		error.GetUserHasDecisionForBidError(c)
 		return
 	}
 
@@ -783,7 +803,6 @@ func SubmitDecisionBid(c *gin.Context) {
 			return
 		}
 	} else {
-		var decisionCnt int
 		err = tx.Get(&decisionCnt, `SELECT COUNT(*)
 							FROM bid_decision
 							WHERE bid_id = $1 AND decision = 'Approved'`,
