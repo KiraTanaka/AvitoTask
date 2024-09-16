@@ -89,7 +89,7 @@ func (t *bid) convertToDto() *bidDto {
 // По заданию непонятно какие права должны быть
 func getBidsListTender(c *gin.Context) {
 	log.Info("Чтение параметров")
-	tenderId := c.Param("Id")
+	tenderId := c.Param("id")
 	limit := c.Query("limit")
 	offset := c.Query("offset")
 	username := c.Query("username")
@@ -213,7 +213,7 @@ func getUserBids(c *gin.Context) {
 
 func getStatusBid(c *gin.Context) {
 	log.Info("Чтение параметров")
-	bidId := c.Param("Id")
+	bidId := c.Param("id")
 	username := c.Query("username")
 
 	log.Info("Валидация")
@@ -357,7 +357,7 @@ func changeStatusBid(c *gin.Context) {
 
 	status := c.Query("status")
 	username := c.Query("username")
-	bidId := c.Param("Id")
+	bidId := c.Param("id")
 
 	log.Info("Валидация")
 	if status == "" {
@@ -459,7 +459,7 @@ func changeStatusBid(c *gin.Context) {
 
 func editBid(c *gin.Context) {
 	log.Info("Чтение параметров")
-	bidId := c.Param("Id")
+	bidId := c.Param("id")
 	username := c.Query("username")
 
 	log.Info("Валидация")
@@ -564,7 +564,7 @@ func editBid(c *gin.Context) {
 }
 func rollbackVersionBid(c *gin.Context) {
 	log.Info("Чтение параметров")
-	bidId := c.Param("Id")
+	bidId := c.Param("id")
 	username := c.Query("username")
 
 	log.Info("Валидация")
@@ -683,7 +683,7 @@ func rollbackVersionBid(c *gin.Context) {
 // Расширенный процесс согласования
 func SubmitDecisionBid(c *gin.Context) {
 	log.Info("Чтение параметров")
-	bidId := c.Param("Id")
+	bidId := c.Param("id")
 	username := c.Query("username")
 	decision := c.Query("decision")
 
