@@ -30,13 +30,10 @@ func NewServer() (*Server, error) {
 		log.Error(err)
 		return nil, err
 	}
-	/*auth.InitAuth(server.Db)
-	validator.InitValidator(server.Db)*/
 	server.Routes = http.InitRoutes()
 	return server, nil
 }
 
-func (server *Server)Run()
-{
+func (server *Server) Run() {
 	server.Routes.Run(server.Config.ServerAddress)
 }
