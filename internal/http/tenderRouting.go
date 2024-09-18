@@ -15,7 +15,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -93,22 +92,8 @@ func getTenders(c *gin.Context) {
 	}
 
 	log.Info("Чтение данных")
-	query := `
-		SELECT id,
-	       name,
-		   COALESCE(description,'') as description,
-	       status,
-	       service_type,
-	       version,
-	       created_at
-		FROM   tender
-		WHERE  service_type = ANY ( $1 )
-				OR $2 = 0
-		ORDER BY name
-		LIMIT $3 OFFSET $4`
-
 	var tenders []tenderDto
-	err := db.Select(&tenders, query, pq.Array(serviceTypes), len(serviceTypes), limit, offset)
+	err := db.GetTendersByTypeOfService(&tenders, serviceTypes, limit, offset)
 	if err != nil {
 		error.GetInternalServerError(c, err)
 		return
@@ -143,21 +128,8 @@ func getUserTender(c *gin.Context) {
 	}
 
 	log.Info("Чтение")
-	query := `SELECT t.id,
-					t.name,
-					COALESCE(t.description, '') AS description,
-					t.status,
-					t.service_type,
-					t.version,
-					t.created_at
-				FROM tender t
-					JOIN organization_responsible org_r ON org_r.organization_id = t.organization_id
-					JOIN employee e ON org_r.user_id = e.id
-				WHERE e.username = $1
-				ORDER BY name
-						LIMIT $2 OFFSET $3`
-	var tenders []tenderDto
-	err = db.Select(&tenders, query, username, limit, offset)
+	tenders := []tenderDto{}
+	err = db.GetUserTenders(&tenders, username, limit, offset)
 	if err != nil {
 		error.GetInternalServerError(c, err)
 		return
