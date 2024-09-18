@@ -1,10 +1,15 @@
 package validator
 
 import (
+	_ "embed"
+
 	"github.com/jmoiron/sqlx"
 )
 
 var db *sqlx.DB
+
+//go:embed checkUserExists.sql
+var checkUserExistsQuery string
 
 func InitValidator(conn *sqlx.DB) {
 	db = conn
@@ -12,9 +17,7 @@ func InitValidator(conn *sqlx.DB) {
 
 func CheckUserExists(username string) error {
 	var userExists bool
-	return db.Get(&userExists, `SELECT TRUE
-								FROM   employee
-								WHERE  username = $1`, username)
+	return db.Get(&userExists, checkUserExistsQuery, username)
 }
 func CheckOrganizationExists(organizationId string) error {
 	var organizationExists bool
