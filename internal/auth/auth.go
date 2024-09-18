@@ -1,15 +1,16 @@
 package auth
 
 import (
-	"github.com/jmoiron/sqlx"
+	_ "avitoTask/internal/db"
+
 	log "github.com/sirupsen/logrus"
 )
 
-var db *sqlx.DB
+/*var db *sqlx.DB
 
 func InitAuth(conn *sqlx.DB) {
 	db = conn
-}
+}*/
 
 func CheckUserCanManageTender(username, organizationId string) error {
 	var isResponsibleOrganization bool

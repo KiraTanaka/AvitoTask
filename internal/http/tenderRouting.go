@@ -10,6 +10,7 @@ import (
 
 	validator "avitoTask/internal"
 	"avitoTask/internal/auth"
+	_ "avitoTask/internal/db"
 	"avitoTask/internal/error"
 
 	"github.com/gin-gonic/gin"

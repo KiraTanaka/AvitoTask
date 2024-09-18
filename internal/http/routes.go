@@ -5,13 +5,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jmoiron/sqlx"
 )
 
-var db *sqlx.DB
-
-func InitRoutes(conn *sqlx.DB) *gin.Engine {
-	db = conn
+func InitRoutes() *gin.Engine {
 	routes := gin.Default()
 
 	routes.GET("/", hello)

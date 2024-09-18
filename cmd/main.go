@@ -19,5 +19,5 @@ func main() {
 		return
 	}
 
-	server.Routes.Run(server.Config.ServerAddress)
+	server.Run()
 }

@@ -1,12 +1,11 @@
 package validator
 
 import (
+	db "avitoTask/internal/db"
 	_ "embed"
 
 	"github.com/jmoiron/sqlx"
 )
-
-var db *sqlx.DB
 
 //go:embed checkUserExists.sql
 var checkUserExistsQuery string
