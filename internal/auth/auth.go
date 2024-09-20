@@ -4,19 +4,23 @@ import (
 	"avitoTask/internal/db"
 )
 
-func CheckUserCanManageTender(username, organizationId string) error {
-	return db.CheckUserCanManageTender(username, organizationId)
-}
-func CheckUserViewTender(username, tenderId string) error {
-	return db.CheckUserViewTender(username, tenderId)
+type AuthHandler struct {
+	DbModels db.DbModels
 }
 
-func CheckUserCanManageBid(username, autorType, authorId string) error {
-	return db.CheckUserCanManageBid(username, autorType, authorId)
+func (ah AuthHandler) CheckUserCanManageTender(username, organizationId string) error {
+	return ah.DbModels.TenderModel.CheckUserCanManageTender(username, organizationId)
 }
-func CheckUserViewBid(username, bidId string) error {
-	return db.CheckUserViewBid(username, bidId)
+func (ah AuthHandler) CheckUserViewTender(username, tenderId string) error {
+	return ah.DbModels.TenderModel.CheckUserViewTender(username, tenderId)
 }
-func CheckUserCanApproveBid(username, tenderId string) error {
-	return db.CheckUserCanApproveBid(username, tenderId)
+
+func (ah AuthHandler) CheckUserCanManageBid(username, autorType, authorId string) error {
+	return ah.DbModels.BidModel.CheckUserCanManageBid(username, autorType, authorId)
+}
+func (ah AuthHandler) CheckUserViewBid(username, bidId string) error {
+	return ah.DbModels.BidModel.CheckUserViewBid(username, bidId)
+}
+func (ah AuthHandler) CheckUserCanApproveBid(username, tenderId string) error {
+	return ah.DbModels.BidModel.CheckUserCanApproveBid(username, tenderId)
 }

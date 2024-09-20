@@ -2,18 +2,17 @@ package core
 
 import (
 	"avitoTask/config"
+	"avitoTask/internal/auth"
 	"avitoTask/internal/db"
 	"avitoTask/internal/http"
 
-	"github.com/gin-gonic/gin"
-	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 )
 
 type Server struct {
 	Config *config.Configuration
-	Db     *sqlx.DB
-	Routes *gin.Engine
+	Routes http.RouteHandler
+	Auth   auth.AuthHandler
 }
 
 func NewServer() (*Server, error) {
@@ -25,12 +24,14 @@ func NewServer() (*Server, error) {
 		log.Error(err)
 		return nil, err
 	}
-	server.Db, err = db.NewDbConnect(server.Config)
+	db, err := db.NewDbConnect(server.Config)
 	if err != nil {
 		log.Error(err)
 		return nil, err
 	}
-	server.Routes = http.InitRoutes()
+	server.Routes.InitRoutes(db)
+	server.Auth.DbModels = db
+	//server.Validator.DbModels = db
 	return server, nil
 }
 

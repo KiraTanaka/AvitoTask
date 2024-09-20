@@ -1,5 +1,6 @@
 package http
 
+/*
 import (
 	"database/sql"
 	"encoding/json"
@@ -69,9 +70,9 @@ func InitBidRoutes(routes *gin.RouterGroup) {
 	bidRoutes.PUT("/:id/submit_decision", SubmitDecisionBid)
 	//PATCH
 	bidRoutes.PATCH("/:id/edit", editBid)
-	/*	bidRoutes.PUT("/:bidId/feedback", feedbackBid)
-		bidRoutes.GET("/:tenderId/reviews", getReviewsOfBid)
-	*/
+	//	bidRoutes.PUT("/:bidId/feedback", feedbackBid)
+	//	bidRoutes.GET("/:tenderId/reviews", getReviewsOfBid)
+
 
 }
 
@@ -638,8 +639,8 @@ func rollbackVersionBid(c *gin.Context) {
 
 	log.Info("Чтение данных")
 	var params string
-	err = db.Get(&params, `SELECT params 
-							FROM bid_version_hist 
+	err = db.Get(&params, `SELECT params
+							FROM bid_version_hist
 							WHERE bid_id = $1 AND version = $2`, bid.Id, version)
 	if err != nil {
 		error.GetVersionNotFoundError(c)
@@ -830,3 +831,4 @@ func SubmitDecisionBid(c *gin.Context) {
 
 	c.JSON(http.StatusOK, bid.convertToDto())
 }
+*/

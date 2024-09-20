@@ -2,7 +2,13 @@ package db
 
 import (
 	_ "embed"
+
+	"github.com/jmoiron/sqlx"
 )
+
+type BidModel struct {
+	db *sqlx.DB
+}
 
 //go:embed queries/checkBidExists.sql
 var checkBidExistsQuery string
@@ -16,20 +22,20 @@ var checkUserViewBidQuery string
 //go:embed queries/checkUserCanApproveBid.sql
 var checkUserCanApproveBidQuery string
 
-func CheckBidExists(bidId string) error {
+func (m BidModel) CheckBidExists(bidId string) error {
 	var bidExists bool
-	return db.Get(&bidExists, checkBidExistsQuery, bidId)
+	return m.db.Get(&bidExists, checkBidExistsQuery, bidId)
 }
 
-func CheckUserCanManageBid(username, autorType, authorId string) error {
+func (m BidModel) CheckUserCanManageBid(username, autorType, authorId string) error {
 	var canManage bool
-	return db.Get(&canManage, checkUserCanManageBidQuery, username, authorId, autorType)
+	return m.db.Get(&canManage, checkUserCanManageBidQuery, username, authorId, autorType)
 }
-func CheckUserViewBid(username, bidId string) error {
+func (m BidModel) CheckUserViewBid(username, bidId string) error {
 	var canView bool
-	return db.Get(&canView, checkUserViewBidQuery, bidId, username)
+	return m.db.Get(&canView, checkUserViewBidQuery, bidId, username)
 }
-func CheckUserCanApproveBid(username, tenderId string) error {
+func (m BidModel) CheckUserCanApproveBid(username, tenderId string) error {
 	var canManage bool
-	return db.Get(&canManage, checkUserCanApproveBidQuery, tenderId, username)
+	return m.db.Get(&canManage, checkUserCanApproveBidQuery, tenderId, username)
 }
