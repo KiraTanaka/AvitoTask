@@ -26,6 +26,17 @@ func (route *RouteHandler) InitRoutes(dbModels db.DbModels) {
 	InitTenderRoutes(routeGroup, &route.TenderHandler)
 	//InitBidRoutes(routeGroup)
 }
+
+func SetDefaultPaginationParamIfEmpty(limit, offset string) (string, string) {
+	if limit == "" {
+		limit = "5"
+	}
+	if offset == "" {
+		offset = "0"
+	}
+	return limit, offset
+}
+
 func hello(c *gin.Context) {
 	c.JSON(http.StatusOK, "hello")
 }
