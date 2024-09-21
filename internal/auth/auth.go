@@ -2,19 +2,33 @@ package auth
 
 import (
 	"avitoTask/internal/db"
+	errors "avitoTask/internal/errors"
 )
 
-type AuthHandler struct {
-	DbModels db.DbModels
+func CheckUserCanManageTender(model db.TenderModel, username, organizationId string) errors.HttpError {
+
+	err := model.CheckUserCanManage(username, organizationId)
+	if err == db.ErrorNoRows {
+		return errors.GetUserNotResponsibleOrganizationError()
+
+	} else if err != nil {
+		return errors.GetInternalServerError(err)
+
+	}
+	return errors.HttpError{}
+}
+func CheckUserViewTender(model db.TenderModel, username, tenderId string) errors.HttpError {
+	err := model.CheckUserView(username, tenderId)
+	if err == db.ErrorNoRows {
+		return errors.GetUserNotViewTenderError()
+	} else if err != nil {
+		return errors.GetInternalServerError(err)
+
+	}
+	return errors.HttpError{}
 }
 
-func (ah AuthHandler) CheckUserCanManageTender(username, organizationId string) error {
-	return ah.DbModels.TenderModel.CheckUserCanManageTender(username, organizationId)
-}
-func (ah AuthHandler) CheckUserViewTender(username, tenderId string) error {
-	return ah.DbModels.TenderModel.CheckUserViewTender(username, tenderId)
-}
-
+/*
 func (ah AuthHandler) CheckUserCanManageBid(username, autorType, authorId string) error {
 	return ah.DbModels.BidModel.CheckUserCanManageBid(username, autorType, authorId)
 }
@@ -23,4 +37,4 @@ func (ah AuthHandler) CheckUserViewBid(username, bidId string) error {
 }
 func (ah AuthHandler) CheckUserCanApproveBid(username, tenderId string) error {
 	return ah.DbModels.BidModel.CheckUserCanApproveBid(username, tenderId)
-}
+}*/

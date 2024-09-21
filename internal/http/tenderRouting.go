@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	validator "avitoTask/internal"
+	"avitoTask/internal/auth"
 	db "avitoTask/internal/db"
 	"avitoTask/internal/errors"
 
@@ -160,16 +161,13 @@ func (th TenderHandler) getStatusTender(c *gin.Context) {
 		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
-	/*
-		log.Info("Авторизация")
-		err = auth.CheckUserViewTender(username, tenderId)
-		if err == sql.ErrNoRows {
-			error.GetUserNotViewTenderError(c)
-			return
-		} else if err != nil {
-			error.GetInternalServerError(c, err)
-			return
-		}*/
+
+	log.Info("Авторизация")
+	errHttp = auth.CheckUserViewTender(th.tender, username, tenderId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
+		return
+	}
 
 	log.Info("Чтение данных")
 	var status string
@@ -203,16 +201,12 @@ func (th TenderHandler) createTender(c *gin.Context) {
 		return
 	}
 
-	/*	log.Info("Авторизация")
-		err = auth.CheckUserCanManageTender(someTender.CreatorUsername, someTender.OrganizationId())
-		if err == sql.ErrNoRows {
-			error.GetUserNotResponsibleOrganizationError(c)
-			return
-		} else if err != nil {
-			error.GetInternalServerError(c, err)
-			return
-		}
-	*/
+	log.Info("Авторизация")
+	errHttp = auth.CheckUserCanManageTender(th.tender, someTender.CreatorUsername, someTender.OrganizationId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
+		return
+	}
 
 	log.Info("Создание")
 	err = th.tender.Create(&someTender)
@@ -260,15 +254,12 @@ func (th TenderHandler) changeStatusTender(c *gin.Context) {
 		return
 	}
 
-	/*log.Info("Авторизация")
-	err = auth.CheckUserCanManageTender(username, tender.OrganizationId)
-	if err == sql.ErrNoRows {
-		error.GetUserNotResponsibleOrganizationError(c)
+	log.Info("Авторизация")
+	errHttp = auth.CheckUserCanManageTender(th.tender, username, tender.OrganizationId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}*/
+	}
 
 	log.Info("Изменение")
 	err = th.tender.ChangeStatus(&status, tender.Id)
@@ -323,15 +314,12 @@ func (th TenderHandler) editTender(c *gin.Context) {
 		return
 	}
 
-	/*log.Info("Авторизация")
-	err = auth.CheckUserCanManageTender(username, tender.OrganizationId)
-	if err == sql.ErrNoRows {
-		error.GetUserNotResponsibleOrganizationError(c)
+	log.Info("Авторизация")
+	errHttp = auth.CheckUserCanManageTender(th.tender, username, tender.OrganizationId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}*/
+	}
 
 	log.Info("Изменение")
 
@@ -382,15 +370,12 @@ func (th TenderHandler) rollbackVersionTender(c *gin.Context) {
 		return
 	}
 
-	/*log.Info("Авторизация")
-	err = auth.CheckUserCanManageTender(username, tender.OrganizationId)
-	if err == sql.ErrNoRows {
-		error.GetUserNotResponsibleOrganizationError(c)
+	log.Info("Авторизация")
+	errHttp = auth.CheckUserCanManageTender(th.tender, username, tender.OrganizationId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}*/
+	}
 
 	if version >= tender.Version {
 		c.AbortWithStatusJSON(errors.GetInvalidVersionError().SeparateCode())

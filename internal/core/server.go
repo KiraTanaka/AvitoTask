@@ -2,7 +2,6 @@ package core
 
 import (
 	"avitoTask/config"
-	"avitoTask/internal/auth"
 	"avitoTask/internal/db"
 	"avitoTask/internal/http"
 
@@ -12,7 +11,6 @@ import (
 type Server struct {
 	Config *config.Configuration
 	Routes http.RouteHandler
-	Auth   auth.AuthHandler
 }
 
 func NewServer() (*Server, error) {
@@ -30,8 +28,6 @@ func NewServer() (*Server, error) {
 		return nil, err
 	}
 	server.Routes.InitRoutes(db)
-	server.Auth.DbModels = db
-	//server.Validator.DbModels = db
 	return server, nil
 }
 

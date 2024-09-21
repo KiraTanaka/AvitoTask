@@ -68,11 +68,11 @@ func (m TenderModel) CheckExists(tenderId string) error {
 	return m.db.Get(&tenderExists, checkTenderExistsQuery, tenderId)
 }
 
-func (m TenderModel) CheckUserCanManageTender(username, organizationId string) error {
+func (m TenderModel) CheckUserCanManage(username, organizationId string) error {
 	var isResponsibleOrganization bool
 	return m.db.Get(&isResponsibleOrganization, checkUserCanManageTenderQuery, organizationId, username)
 }
-func (m TenderModel) CheckUserViewTender(username, tenderId string) error {
+func (m TenderModel) CheckUserView(username, tenderId string) error {
 	var canView bool
 	return m.db.Get(&canView, checkUserViewTenderQuery, tenderId, username)
 }
