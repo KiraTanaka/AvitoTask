@@ -5,6 +5,7 @@ SELECT id,
 	author_type,
 	author_id,
 	version,
-	created_at
+	created_at,
+	decision
 FROM bid 
 WHERE id = $1

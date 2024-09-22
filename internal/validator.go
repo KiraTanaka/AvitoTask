@@ -92,19 +92,35 @@ func CheckServiceTypes(serviceTypes []string, serviceTypesConst []string) errors
 	return errors.HttpError{}
 }
 
-func CheckTenderStatus(status string, statusConst []string) errors.HttpError {
+func AuthorTypeAcceptable(authorType string, authorTypesConst []string) errors.HttpError {
+	if !slices.Contains(authorTypesConst, authorType) {
+		return errors.GetInvalidAuthorTypeError()
+	}
+	return errors.HttpError{}
+}
+
+func CheckStatus(status string, statusesConst []string) errors.HttpError {
 	if status == "" {
 		return errors.GetNewStatusNotPassedError()
-	} else if !slices.Contains(statusConst, status) {
+	} else if !slices.Contains(statusesConst, status) {
 		return errors.GetInvalidStatusError()
 	}
 	return errors.HttpError{}
 }
 
-func CheckTenderVersion(param string) (int, errors.HttpError) {
+func CheckVersion(param string) (int, errors.HttpError) {
 	version, err := strconv.Atoi(param)
 	if err != nil {
-		return 0, errors.GetInvalidRequestFormatOrParametersError(err)
+		return 0, errors.GetInvalidVersionError()
 	}
 	return version, errors.HttpError{}
+}
+
+func CheckBidDecision(decision string, decisionTypesConst []string) errors.HttpError {
+	if decision == "" {
+		return errors.GetDecisionNotPassedError()
+	} else if !slices.Contains(decisionTypesConst, decision) {
+		return errors.GetInvalidDecisionError()
+	}
+	return errors.HttpError{}
 }

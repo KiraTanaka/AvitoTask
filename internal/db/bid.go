@@ -41,7 +41,7 @@ var checkUserCanApproveBidQuery string
 var changeBidDecisionQuery string
 
 //go:embed queries/bid/changeBidStatus.sql
-var changeBidStatusrQuery string
+var changeBidStatusQuery string
 
 //go:embed queries/bid/createBid.sql
 var createBidQuery string
@@ -79,6 +79,14 @@ func BidDefault() Bid {
 		Status:    "Created"}
 }
 
+func (m BidModel) BeginTransaction() (*sqlx.Tx, error) {
+	tx, err := m.db.Beginx()
+	if err != nil {
+		return nil, err
+	}
+	return tx, nil
+}
+
 func (m BidModel) CheckExists(bidId string) error {
 	var bidExists bool
 	return m.db.Get(&bidExists, checkBidExistsQuery, bidId)
@@ -97,36 +105,82 @@ func (m BidModel) CheckUserCanApproveBid(username, tenderId string) error {
 	return m.db.Get(&canManage, checkUserCanApproveBidQuery, tenderId, username)
 }
 
-func (m BidModel) changeBidDecision() error {
+func (m BidModel) ChangeDecision(tx *sqlx.Tx, decision, bidId string) error {
+	_, err := tx.Exec(changeBidDecisionQuery, decision, bidId)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
-func (m BidModel) changeBidStatus() error {
+func (m BidModel) ChangeStatus(status *string, bidId string) error {
+	tx, err := m.db.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	_, err = tx.Exec(changeBidStatusQuery, status, bidId)
+	if err != nil {
+		return err
+	}
+	tx.Commit()
 	return nil
 }
 
-func (m BidModel) createBid() error {
+func (m BidModel) Create(bid *Bid) error {
+	var lastInsertId string
+	tx, err := m.db.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	err = tx.QueryRow(createBidQuery, bid.Name, bid.Description, bid.Status,
+		bid.TenderId, bid.AuthorType, bid.AuthorId,
+		bid.Version, bid.CreatedAt).Scan(&lastInsertId)
+	if err != nil {
+		return err
+	}
+	tx.Commit()
+	bid.Id = lastInsertId
 	return nil
 }
 
-func (m BidModel) createBidDecision() error {
+func (m BidModel) CreateDecision(tx *sqlx.Tx, bidId, username, decision string) error {
+	_, err := tx.Exec(createBidDecisionQuery, bidId, username, decision)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
-func (m BidModel) editBid() error {
+func (m BidModel) Edit(bid *Bid) error {
+	tx, err := m.db.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.NamedExec(editBidQuery, bid)
+	if err != nil {
+		return err
+	}
+	tx.Commit()
 	return nil
 }
 
-func (m BidModel) getBid() error {
-	return nil
+func (m BidModel) Get(bid *Bid, bidId string) error {
+	err := m.db.Get(bid, getBidQuery, bidId)
+	return err
 }
 
-func (m BidModel) getBidApprovedCount() error {
-	return nil
+func (m BidModel) GetApprovedCount(tx *sqlx.Tx, decisionCnt *int, bidId string) error {
+	err := tx.Get(decisionCnt, getBidApprovedCountQuery, bidId)
+	return err
 }
 
-func (m BidModel) getBidDecisionCountByUser() error {
-	return nil
+func (m BidModel) GetDecisionCountByUser(decisionCnt *int, bidId, username string) error {
+	err := m.db.Get(decisionCnt, getBidDecisionCountByUserQuery, bidId, username)
+	return err
 }
 
 func (m BidModel) GetBidsByTender(tenderId, limit, offset string) ([]Bid, error) {
@@ -140,11 +194,12 @@ func (m BidModel) GetStatus(status *string, bidId string) error {
 	return err
 }
 
-func (m BidModel) getParamsBidByVersion() error {
-	return nil
+func (m BidModel) GetParamsByVersion(params *string, bidId string, version int) error {
+	err := m.db.Get(params, getParamsBidByVersionQuery, bidId, version)
+	return err
 }
 
-func (m BidModel) GetUserBids(username, limit, offset string) ([]Bid, error) {
+func (m BidModel) GetListForUser(username, limit, offset string) ([]Bid, error) {
 	bids := []Bid{}
 	err := m.db.Select(&bids, getBidsByTenderQuery, username, limit, offset)
 	return bids, err

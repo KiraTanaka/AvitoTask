@@ -1,21 +1,24 @@
 package http
 
 import (
+	"encoding/json"
 	"net/http"
 
 	validator "avitoTask/internal"
 	"avitoTask/internal/auth"
 	db "avitoTask/internal/db"
 	"avitoTask/internal/errors"
+	"avitoTask/internal/services"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 )
 
 type BidHandler struct {
-	bid    db.BidModel
-	tender db.TenderModel
-	user   db.UserModel
+	bid          db.BidModel
+	tender       db.TenderModel
+	user         db.UserModel
+	organization db.OrganizationModel
 }
 
 type bidDto struct {
@@ -35,11 +38,9 @@ type bidDecision struct {
 	Decision string `json:"decision" db:"decision" binding:"oneof=Approved Rejected"`
 }
 
-var BidStatusConst []string = []string{"Created", "Published", "Canceled"}
-var BidAuthorType []string = []string{"Organization", "User"}
-var BidDecisionType []string = []string{"Approved", "Rejected"}
-
-const Quorum int = 3
+var bidStatusesConst []string = []string{"Created", "Published", "Canceled"}
+var bidAuthorTypesConst []string = []string{"Organization", "User"}
+var bidDecisionTypesConst []string = []string{"Approved", "Rejected"}
 
 func InitBidRoutes(routes *gin.RouterGroup, bidHandler *BidHandler) {
 	bidRoutes := routes.Group("/bids")
@@ -122,7 +123,7 @@ func (h BidHandler) getUserBids(c *gin.Context) {
 	}
 
 	log.Info("Чтение")
-	bids, err := h.bid.GetUserBids(username, limit, offset)
+	bids, err := h.bid.GetListForUser(username, limit, offset)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
@@ -172,90 +173,63 @@ func (h BidHandler) getStatusBid(c *gin.Context) {
 	c.JSON(http.StatusOK, status)
 }
 
-/*
 func (h BidHandler) createBid(c *gin.Context) {
 	log.Info("Чтение параметров")
-	someBid := bid{Version: 1, CreatedAt: time.Now().Format(time.RFC3339), Status: "Created"}
+	someBid := db.BidDefault()
 	err := c.BindJSON(&someBid)
 	if err != nil {
-		error.GetInvalidRequestFormatOrParametersError(c, err)
+		c.AbortWithStatusJSON(errors.GetInvalidRequestFormatOrParametersError(err).SeparateCode())
 		return
 	}
 
 	log.Info("Валидация")
-	if err := uuid.Validate(someBid.TenderId); err != nil {
-		error.GetInvalidRequestFormatOrParametersError(c, err)
-		return
-	}
-	if err := uuid.Validate(someBid.AuthorId); err != nil {
-		error.GetInvalidRequestFormatOrParametersError(c, err)
-		return
-	}
-	err = validator.CheckUserExists(someBid.CreatorUsername)
-	if err == sql.ErrNoRows {
-		error.GetUserNotExistsOrIncorrectError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp := validator.CheckTender(h.tender, someBid.TenderId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
-	err = validator.CheckTenderExists(someBid.TenderId)
-	if err == sql.ErrNoRows {
-		error.GetTenderNotFoundError(c)
+	errHttp = validator.AuthorTypeAcceptable(someBid.AuthorType, bidAuthorTypesConst)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	}
+
+	if someBid.AuthorType == "User" {
+		errHttp := validator.CheckUser(h.user, someBid.AuthorId)
+		if !errHttp.IsEmpty() {
+			c.AbortWithStatusJSON(errHttp.SeparateCode())
+			return
+		}
+	} else if someBid.AuthorType == "Organization" {
+		errHttp = validator.CheckOrganization(h.organization, someBid.AuthorId)
+		if !errHttp.IsEmpty() {
+			c.AbortWithStatusJSON(errHttp.SeparateCode())
+			return
+		}
+	}
+
+	errHttp = validator.CheckUser(h.user, someBid.CreatorUsername)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
 	log.Info("Авторизация")
-	err = auth.CheckUserCanManageBid(someBid.CreatorUsername, someBid.AuthorType, someBid.AuthorId)
-	if err == sql.ErrNoRows {
-		error.GetUserNotAuthorOrResponsibleOrganizationError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp = auth.CheckUserCanManageBid(h.bid, someBid.CreatorUsername, someBid.AuthorType, someBid.AuthorId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
 	log.Info("Создание")
-	var lastInsertId string
-	tx, err := db.Beginx()
+	err = h.bid.Create(&someBid)
 	if err != nil {
-		error.GetInternalServerError(c, err)
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
-	defer tx.Rollback()
-	query := `INSERT INTO bid
-							(name,
-							description,
-							status,
-							tender_id,
-							author_type,
-							author_id,
-							version,
-							created_at)
-				VALUES     ($1,
-							$2,
-							$3,
-							$4,
-							$5,
-							$6,
-							$7,
-							$8)
-						RETURNING id`
-	err = tx.QueryRow(query, someBid.Name, someBid.Description, someBid.Status,
-		someBid.TenderId, someBid.AuthorType, someBid.AuthorId,
-		someBid.Version, someBid.CreatedAt).Scan(&lastInsertId)
-	if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}
-	tx.Commit()
-	someBid.Id = lastInsertId
 
-	c.JSON(http.StatusOK, someBid.convertToDto())
+	c.JSON(http.StatusOK, bidConvertToDto(someBid))
 }
 
 func (h BidHandler) changeStatusBid(c *gin.Context) {
@@ -266,101 +240,54 @@ func (h BidHandler) changeStatusBid(c *gin.Context) {
 	bidId := c.Param("id")
 
 	log.Info("Валидация")
-	if status == "" {
-		error.GetNewStatusNotPassedError(c)
-		return
-	}
-	if !slices.Contains(BidStatusConst, status) {
-		error.GetInvalidStatusError(c)
+	errHttp := validator.CheckStatus(status, bidStatusesConst)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
-	if bidId == "" {
-		error.GetBidIdNotPassedError(c)
-		return
-	}
-	if err := uuid.Validate(bidId); err != nil {
-		error.GetInvalidRequestFormatOrParametersError(c, err)
-		return
-	}
-	err := validator.CheckBidExists(bidId)
-	if err == sql.ErrNoRows {
-		error.GetBidNotFoundError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp = validator.CheckBid(h.bid, bidId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
-	if username == "" {
-		error.GetUserNotPassedError(c)
-		return
-	}
-	err = validator.CheckUserExists(username)
-	if err == sql.ErrNoRows {
-		error.GetUserNotExistsOrIncorrectError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp = validator.CheckUser(h.user, username)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
-	log.Info("Чтение данных")
-	bid := bid{}
-	err = db.Get(&bid, `SELECT id,
-								name,
-								status,
-								tender_id,
-								author_type,
-								author_id,
-								version,
-								created_at
-							FROM bid WHERE id = $1`, bidId)
+	log.Info("Чтение дополнительных данных")
+	bid := db.BidDefault()
+	err := h.bid.Get(&bid, bidId)
 	if err != nil {
-		error.GetInternalServerError(c, err)
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
 
 	log.Info("Авторизация")
-	err = auth.CheckUserCanManageBid(username, bid.AuthorType, bid.AuthorId)
-	if err == sql.ErrNoRows {
-		error.GetUserNotAuthorOrResponsibleOrganizationError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp = auth.CheckUserCanManageBid(h.bid, username, bid.AuthorType, bid.AuthorId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
 	log.Info("Изменение")
-	tx, err := db.Beginx()
+	err = h.bid.ChangeStatus(&status, bid.Id)
 	if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}
-	defer tx.Rollback()
-	_, err = tx.Exec("UPDATE bid SET status = $1 WHERE id = $2", status, bid.Id)
-	if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}
-	tx.Commit()
-
-	log.Info("Чтение данных")
-	err = db.Get(&bid, `SELECT id,
-								name,
-								status,
-								tender_id,
-								author_type,
-								author_id,
-								version,
-								created_at
-							FROM bid WHERE id = $1`, bid.Id)
-	if err != nil {
-		error.GetInternalServerError(c, err)
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
 
-	c.JSON(http.StatusOK, bid.convertToDto())
+	log.Info("Чтение измененных данных")
+	err = h.bid.Get(&bid, bid.Id)
+	if err != nil {
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
+		return
+	}
+
+	c.JSON(http.StatusOK, bidConvertToDto(bid))
 }
 
 func (h BidHandler) editBid(c *gin.Context) {
@@ -369,221 +296,132 @@ func (h BidHandler) editBid(c *gin.Context) {
 	username := c.Query("username")
 
 	log.Info("Валидация")
-	if bidId == "" {
-		error.GetTenderIdNotPassedError(c)
-		return
-	}
-	if err := uuid.Validate(bidId); err != nil {
-		error.GetInvalidRequestFormatOrParametersError(c, err)
-		return
-	}
-	err := validator.CheckBidExists(bidId)
-	if err == sql.ErrNoRows {
-		error.GetBidNotFoundError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp := validator.CheckBid(h.bid, bidId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
-	if username == "" {
-		error.GetUserNotPassedError(c)
-		return
-	}
-	err = validator.CheckUserExists(username)
-	if err == sql.ErrNoRows {
-		error.GetUserNotExistsOrIncorrectError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp = validator.CheckUser(h.user, username)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
-	log.Info("Чтение данных")
-	bid := bid{}
-	err = db.Get(&bid, `SELECT id,
-								name,
-								status,
-								tender_id,
-								author_type,
-								author_id,
-								version,
-								created_at
-							FROM bid WHERE id = $1`, bidId)
+	log.Info("Чтение исходных данных")
+	bid := db.BidDefault()
+	err := h.bid.Get(&bid, bidId)
 	if err != nil {
-		error.GetInternalServerError(c, err)
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
 
+	log.Info("Чтение новых значений")
 	err = c.BindJSON(&bid)
 	if err != nil {
-		error.GetInvalidRequestFormatOrParametersError(c, err)
+		c.AbortWithStatusJSON(errors.GetInvalidRequestFormatOrParametersError(err).SeparateCode())
+		return
+	}
+
+	errHttp = validator.AuthorTypeAcceptable(bid.AuthorType, bidAuthorTypesConst)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
 	log.Info("Авторизация")
-	err = auth.CheckUserCanManageBid(username, bid.AuthorType, bid.AuthorId)
-	if err == sql.ErrNoRows {
-		error.GetUserNotAuthorOrResponsibleOrganizationError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp = auth.CheckUserCanManageBid(h.bid, username, bid.AuthorType, bid.AuthorId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
 	log.Info("Изменение")
-	query := `UPDATE bid
-				SET    name = :name,
-						description = :description
-				WHERE  id = :id`
-
-	tx, err := db.Beginx()
+	err = h.bid.Edit(&bid)
 	if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}
-	defer tx.Rollback()
-
-	_, err = tx.NamedExec(query, bid)
-	if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}
-	tx.Commit()
-
-	log.Info("Чтение данных")
-	err = db.Get(&bid, `SELECT id,
-								name,
-								status,
-								tender_id,
-								author_type,
-								author_id,
-								version,
-								created_at
-							FROM bid WHERE id = $1`, bid.Id)
-	if err != nil {
-		error.GetInternalServerError(c, err)
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
 
-	c.JSON(http.StatusOK, bid.convertToDto())
+	log.Info("Чтение измененных данных")
+	err = h.bid.Get(&bid, bid.Id)
+	if err != nil {
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
+		return
+	}
+
+	c.JSON(http.StatusOK, bidConvertToDto(bid))
 }
+
 func (h BidHandler) rollbackVersionBid(c *gin.Context) {
 	log.Info("Чтение параметров")
 	bidId := c.Param("id")
 	username := c.Query("username")
 
 	log.Info("Валидация")
-	if bidId == "" {
-		error.GetBidIdNotPassedError(c)
-		return
-	}
-	if err := uuid.Validate(bidId); err != nil {
-		error.GetInvalidRequestFormatOrParametersError(c, err)
-		return
-	}
-	err := validator.CheckBidExists(bidId)
-	if err == sql.ErrNoRows {
-		error.GetBidNotFoundError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp := validator.CheckBid(h.bid, bidId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
-	version, err := strconv.Atoi(c.Param("version"))
+	version, errHttp := validator.CheckVersion(c.Param("version"))
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
+		return
+	}
+
+	errHttp = validator.CheckUser(h.user, username)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
+		return
+	}
+
+	log.Info("Чтение исходных данных")
+	bid := db.BidDefault()
+	err := h.bid.Get(&bid, bidId)
 	if err != nil {
-		error.GetInvalidRequestFormatOrParametersError(c, err)
-		return
-	}
-
-	if username == "" {
-		error.GetUserNotPassedError(c)
-		return
-	}
-	err = validator.CheckUserExists(username)
-	if err == sql.ErrNoRows {
-		error.GetUserNotExistsOrIncorrectError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}
-
-	log.Info("Чтение данных")
-	bid := bid{}
-	err = db.Get(&bid, `SELECT id,
-								name,
-								status,
-								tender_id,
-								author_type,
-								author_id,
-								version,
-								created_at
-							FROM bid WHERE id = $1`, bidId)
-	if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}
-
-	log.Info("Авторизация")
-	err = auth.CheckUserCanManageBid(username, bid.AuthorType, bid.AuthorId)
-	if err == sql.ErrNoRows {
-		error.GetUserNotAuthorOrResponsibleOrganizationError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
 
 	if version >= bid.Version {
-		error.GetInvalidVersionError(c)
+		c.AbortWithStatusJSON(errors.GetVersionIsOutOfBoundsError().SeparateCode())
 		return
 	}
 
-	log.Info("Чтение данных")
-	var params string
-	err = db.Get(&params, `SELECT params
-							FROM bid_version_hist
-							WHERE bid_id = $1 AND version = $2`, bid.Id, version)
-	if err != nil {
-		error.GetVersionNotFoundError(c)
+	log.Info("Авторизация")
+	errHttp = auth.CheckUserCanManageBid(h.bid, username, bid.AuthorType, bid.AuthorId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
+
+	log.Info("Чтение данных версии")
+	var params string
+	err = h.bid.GetParamsByVersion(&params, bid.Id, version)
+	if err != nil {
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
+		return
+	}
+
 	json.Unmarshal([]byte(params), &bid)
 
-	log.Info("Изменение")
-	query := `UPDATE bid
-				SET    name = :name,
-						description = :description
-				WHERE  id = :id`
-
-	tx := db.MustBegin()
-	_, err = tx.NamedExec(query, &bid)
+	log.Info("Откат до версии")
+	err = h.bid.Edit(&bid)
 	if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}
-	tx.Commit()
-
-	log.Info(bid.Id)
-
-	log.Info("Чтение данных")
-	err = db.Get(&bid, `SELECT id,
-								name,
-								status,
-								tender_id,
-								author_type,
-								author_id,
-								version,
-								created_at
-							FROM bid WHERE id = $1`, bid.Id)
-	if err != nil {
-		error.GetInternalServerError(c, err)
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
 
-	c.JSON(http.StatusOK, bid.convertToDto())
+	log.Info("Чтение измененных данных")
+	err = h.bid.Get(&bid, bid.Id)
+	if err != nil {
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
+		return
+	}
+
+	c.JSON(http.StatusOK, bidConvertToDto(bid))
 }
 
 // Расширенный процесс согласования
@@ -594,145 +432,62 @@ func (h BidHandler) SubmitDecisionBid(c *gin.Context) {
 	decision := c.Query("decision")
 
 	log.Info("Валидация")
-	if decision == "" {
-		error.GetDecisionNotPassedError(c)
-		return
-	}
-	if !slices.Contains(BidDecisionType, decision) {
-		error.GetInvalidDecisionError(c)
+	errHttp := validator.CheckBidDecision(decision, bidDecisionTypesConst)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
-	if bidId == "" {
-		error.GetBidIdNotPassedError(c)
-		return
-	}
-	if err := uuid.Validate(bidId); err != nil {
-		error.GetInvalidRequestFormatOrParametersError(c, err)
-		return
-	}
-	err := validator.CheckBidExists(bidId)
-	if err == sql.ErrNoRows {
-		error.GetBidNotFoundError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp = validator.CheckBid(h.bid, bidId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
-	if username == "" {
-		error.GetUserNotPassedError(c)
-		return
-	}
-	err = validator.CheckUserExists(username)
-	if err == sql.ErrNoRows {
-		error.GetUserNotExistsOrIncorrectError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp = validator.CheckUser(h.user, username)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
-	log.Info("Чтение данных")
-	bid := bid{}
-	err = db.Get(&bid, `SELECT id,
-								name,
-								status,
-								tender_id,
-								author_type,
-								author_id,
-								version,
-								created_at,
-								decision
-							FROM bid WHERE id = $1`, bidId)
+	log.Info("Чтение дополнительных данных")
+	bid := db.BidDefault()
+	err := h.bid.Get(&bid, bidId)
 	if err != nil {
-		error.GetInternalServerError(c, err)
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
 
 	if bid.Decision != nil {
-		error.GetBidAlreadyHasDecisionError(c)
+		c.AbortWithStatusJSON(errors.GetBidAlreadyHasDecisionError().SeparateCode())
 		return
 	}
 
 	var decisionCnt int
-	err = db.Get(&decisionCnt, `SELECT COUNT(*)
-							FROM bid_decision
-							WHERE bid_id = $1 AND username=$2`,
-		bid.Id, username)
+	err = h.bid.GetDecisionCountByUser(&decisionCnt, bid.Id, username)
 	if err != nil {
-		error.GetInternalServerError(c, err)
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
+
 	if decisionCnt >= 1 {
-		error.GetUserHasDecisionForBidError(c)
+		c.AbortWithStatusJSON(errors.GetUserHasDecisionForBidError().SeparateCode())
 		return
 	}
 
 	log.Info("Авторизация")
-	err = auth.CheckUserCanApproveBid(username, bid.TenderId)
-	if err == sql.ErrNoRows {
-		error.GetUserNotResponsibleOrganizationError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp = auth.CheckUserCanApproveBid(h.bid, username, bid.TenderId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
-	log.Info("Изменение")
-	var lastInsertId string
-	tx, err := db.Beginx()
+	log.Info("Запись решения")
+	services.MakingDecision(h.bid, h.tender, bid.Id, bid.TenderId, username, decision)
 	if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}
-	defer tx.Rollback()
-	err = tx.QueryRow(`INSERT INTO bid_decision
-									(bid_id,
-									username,
-									decision)
-						VALUES     ($1,
-									$2,
-									$3)
-						RETURNING id`, bid.Id,
-		username, decision).Scan(&lastInsertId)
-	if err != nil {
-		error.GetInternalServerError(c, err)
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
 
-	if decision == "Rejected" {
-
-		_, err = tx.Exec("UPDATE bid SET decision = $1 WHERE id = $2", decision, bid.Id)
-		if err != nil {
-			error.GetInternalServerError(c, err)
-			return
-		}
-	} else {
-		err = tx.Get(&decisionCnt, `SELECT COUNT(*)
-							FROM bid_decision
-							WHERE bid_id = $1 AND decision = 'Approved'`,
-			bid.Id)
-		if err != nil {
-			error.GetInternalServerError(c, err)
-			return
-		}
-		log.Info(decisionCnt)
-		if decisionCnt >= Quorum {
-			_, err = tx.Exec("UPDATE bid SET decision = $1 WHERE id = $2", decision, bid.Id)
-			if err != nil {
-				error.GetInternalServerError(c, err)
-				return
-			}
-			_, err = tx.Exec("UPDATE tender SET status = $1 WHERE id = $2", "Closed", bid.TenderId)
-			if err != nil {
-				error.GetInternalServerError(c, err)
-				return
-			}
-		}
-	}
-	tx.Commit()
-
-	c.JSON(http.StatusOK, bid.convertToDto())
+	c.JSON(http.StatusOK, bidConvertToDto(bid))
 }
-*/

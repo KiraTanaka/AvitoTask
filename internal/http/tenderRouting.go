@@ -19,19 +19,6 @@ type TenderHandler struct {
 	organization db.OrganizationModel
 }
 
-/*
-type tender struct {
-	Id              string `json:"id" db:"id" binding:"max=100"`
-	Name            string `json:"name" db:"name" binding:"required,max=100"`
-	Description     string `json:"description" db:"description" binding:"required,max=500"`
-	ServiceType     string `json:"serviceType" db:"service_type" binding:"required,oneof=Construction Delivery Manufacture"`
-	Status          string `json:"status" db:"status" binding:"required,oneof=Created Published Closed"`
-	Version         int    `json:"version" db:"version" binding:"required,min=1"`
-	OrganizationId  string `json:"organizationId" db:"organization_id" binding:"required,max=100"`
-	CreatedAt       string `json:"createdAt" db:"created_at" binding:"required"`
-	CreatorUsername string `json:"creatorUsername"`
-}*/
-
 type tenderDto struct {
 	Id          string `json:"id" binding:"max=100"`
 	Name        string `json:"name" binding:"required,max=100"`
@@ -42,7 +29,7 @@ type tenderDto struct {
 	CreatedAt   string `json:"createdAt" binding:"required"`
 }
 
-var statusConst []string = []string{"Created", "Published", "Closed"}
+var statusesConst []string = []string{"Created", "Published", "Closed"}
 var serviceTypesConst []string = []string{"Construction", "Delivery", "Manufacture"}
 
 func InitTenderRoutes(routes *gin.RouterGroup, tenderHandler *TenderHandler) {
@@ -172,7 +159,13 @@ func (h TenderHandler) createTender(c *gin.Context) {
 	}
 
 	log.Info("Валидация")
-	errHttp := validator.CheckUser(h.user, someTender.CreatorUsername)
+	errHttp := validator.ServiceTypeIsAcceptable(someTender.ServiceType, serviceTypesConst)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
+		return
+	}
+
+	errHttp = validator.CheckUser(h.user, someTender.CreatorUsername)
 	if !errHttp.IsEmpty() {
 		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
@@ -208,7 +201,7 @@ func (h TenderHandler) changeStatusTender(c *gin.Context) {
 	tenderId := c.Param("tenderId")
 
 	log.Info("Валидация")
-	errHttp := validator.CheckTenderStatus(status, statusConst)
+	errHttp := validator.CheckStatus(status, statusesConst)
 	if !errHttp.IsEmpty() {
 		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
@@ -226,7 +219,7 @@ func (h TenderHandler) changeStatusTender(c *gin.Context) {
 		return
 	}
 
-	log.Info("Чтение дополнительных параметров")
+	log.Info("Чтение дополнительных данных")
 	tender := db.TenderDefault()
 	err := h.tender.Get(&tender, tenderId)
 	if err != nil {
@@ -242,7 +235,7 @@ func (h TenderHandler) changeStatusTender(c *gin.Context) {
 	}
 
 	log.Info("Изменение")
-	err = h.tender.ChangeStatus(&status, tender.Id)
+	err = h.tender.ChangeStatus(status, tender.Id)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
@@ -332,7 +325,7 @@ func (h TenderHandler) rollbackVersionTender(c *gin.Context) {
 		return
 	}
 
-	version, errHttp := validator.CheckTenderVersion(c.Param("version"))
+	version, errHttp := validator.CheckVersion(c.Param("version"))
 	if !errHttp.IsEmpty() {
 		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
@@ -353,7 +346,7 @@ func (h TenderHandler) rollbackVersionTender(c *gin.Context) {
 	}
 
 	if version >= tender.Version {
-		c.AbortWithStatusJSON(errors.GetInvalidVersionError().SeparateCode())
+		c.AbortWithStatusJSON(errors.GetVersionIsOutOfBoundsError().SeparateCode())
 		return
 	}
 
@@ -366,7 +359,7 @@ func (h TenderHandler) rollbackVersionTender(c *gin.Context) {
 
 	log.Info("Чтение данных версии")
 	var params string
-	err = h.tender.GetParamsByVersion(&params, tenderId, version)
+	err = h.tender.GetParamsByVersion(&params, tender.Id, version)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return

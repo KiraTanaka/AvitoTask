@@ -131,17 +131,27 @@ func (m TenderModel) Edit(tender *Tender) error {
 	return nil
 }
 
-func (m TenderModel) ChangeStatus(status *string, tenderId string) error {
-	tx, err := m.db.Beginx()
-	if err != nil {
-		return err
+func (m TenderModel) ChangeStatus(status string, tenderId string, txs ...*sqlx.Tx) error {
+	var tx *sqlx.Tx
+	var err error
+	if len(txs) == 1 {
+		tx = txs[0]
+	} else {
+		tx, err = m.db.Beginx()
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
 	}
-	defer tx.Rollback()
+
 	_, err = tx.Exec(changeStatusTenderQuery, status, tenderId)
 	if err != nil {
 		return err
 	}
-	tx.Commit()
+
+	if len(txs) == 0 {
+		tx.Commit()
+	}
 	return nil
 }
 

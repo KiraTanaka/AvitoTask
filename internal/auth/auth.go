@@ -28,11 +28,17 @@ func CheckUserViewTender(model db.TenderModel, username, tenderId string) errors
 	return errors.HttpError{}
 }
 
-/*
-	func (ah AuthHandler) CheckUserCanManageBid(username, autorType, authorId string) error {
-		return ah.DbModels.BidModel.CheckUserCanManageBid(username, autorType, authorId)
+func CheckUserCanManageBid(model db.BidModel, username, autorType, authorId string) errors.HttpError {
+	err := model.CheckUserCanManageBid(username, autorType, authorId)
+	if err == db.ErrorNoRows {
+		return errors.GetUserNotViewBidError()
+	} else if err != nil {
+		return errors.GetInternalServerError(err)
+
 	}
-*/
+	return errors.HttpError{}
+}
+
 func CheckUserViewBid(model db.BidModel, username, bidId string) errors.HttpError {
 	err := model.CheckUserView(username, bidId)
 	if err == db.ErrorNoRows {
@@ -44,7 +50,13 @@ func CheckUserViewBid(model db.BidModel, username, bidId string) errors.HttpErro
 	return errors.HttpError{}
 }
 
-/*
-func (ah AuthHandler) CheckUserCanApproveBid(username, tenderId string) error {
-	return ah.DbModels.BidModel.CheckUserCanApproveBid(username, tenderId)
-}*/
+func CheckUserCanApproveBid(model db.BidModel, username, tenderId string) errors.HttpError {
+	err := model.CheckUserCanApproveBid(username, tenderId)
+	if err == db.ErrorNoRows {
+		return errors.GetUserNotResponsibleOrganizationError()
+	} else if err != nil {
+		return errors.GetInternalServerError(err)
+
+	}
+	return errors.HttpError{}
+}

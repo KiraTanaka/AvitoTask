@@ -25,10 +25,12 @@ var (
 	TenderIdNotPassedError                = HttpError{http.StatusBadRequest, "Идентификатор тендера должен быть указан."}
 	BidIdNotPassedError                   = HttpError{http.StatusBadRequest, "Идентификатор предложения должен быть указан."}
 	AuthorNotFoundError                   = HttpError{http.StatusBadRequest, "Указанный автор не существует."}
-	InvalidVersionError                   = HttpError{http.StatusBadRequest, "Указанная версия больше или равна текущей версии тендера."}
-	InvalidServiceTypeError               = HttpError{http.StatusBadRequest, "Недопустимый вид услуги"}
-	InvalidStatusError                    = HttpError{http.StatusBadRequest, "Недопустимый статус"}
-	InvalidDecisionError                  = HttpError{http.StatusBadRequest, "Недопустимое решение"}
+	InvalidVersionError                   = HttpError{http.StatusBadRequest, "Недопустимый формат версии."}
+	VersionIsOutOfBoundsError             = HttpError{http.StatusBadRequest, "Указанная версия больше или равна текущей версии тендера."}
+	InvalidServiceTypeError               = HttpError{http.StatusBadRequest, "Недопустимый вид услуги."}
+	InvalidStatusError                    = HttpError{http.StatusBadRequest, "Недопустимый статус."}
+	InvalidAuthorTypeError                = HttpError{http.StatusBadRequest, "Недопустимый тип автора."}
+	InvalidDecisionError                  = HttpError{http.StatusBadRequest, "Недопустимое решение."}
 	DecisionNotPassedError                = HttpError{http.StatusBadRequest, "Решение должено быть указано."}
 	BidAlreadyHasDecisionError            = HttpError{http.StatusBadRequest, "Решение по предложению уже принято."}
 	UserHasDecisionForBidError            = HttpError{http.StatusBadRequest, "Вы уже приняли решение по предложению."}
@@ -81,6 +83,11 @@ func GetInvalidVersionError() HttpError {
 	return InvalidVersionError
 }
 
+func GetVersionIsOutOfBoundsError() HttpError {
+	log.Error(VersionIsOutOfBoundsError)
+	return VersionIsOutOfBoundsError
+}
+
 func GetInvalidServiceTypeError() HttpError {
 	log.Error(InvalidServiceTypeError)
 	return InvalidServiceTypeError
@@ -107,6 +114,11 @@ func GetBidAlreadyHasDecisionError() HttpError {
 func GetUserHasDecisionForBidError() HttpError {
 	log.Error(UserHasDecisionForBidError)
 	return UserHasDecisionForBidError
+}
+
+func GetInvalidAuthorTypeError() HttpError {
+	log.Error(InvalidAuthorTypeError)
+	return InvalidAuthorTypeError
 }
 
 // 401 (StatusUnauthorized) - Пользователь не существует или некорректен.
