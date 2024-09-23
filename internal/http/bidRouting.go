@@ -48,14 +48,14 @@ func InitBidRoutes(routes *gin.RouterGroup, bidHandler *BidHandler) {
 	bidRoutes.GET("/:id/list", bidHandler.getBidsListTender)
 	bidRoutes.GET("/my", bidHandler.getUserBids)
 	bidRoutes.GET("/:id/status", bidHandler.getStatusBid)
-	/*//POST
-	bidRoutes.POST("/new", createBid)
+	//POST
+	bidRoutes.POST("/new", bidHandler.createBid)
 	//PUT
-	bidRoutes.PUT("/:id/status", changeStatusBid)
-	bidRoutes.PUT("/:id/rollback/:version", rollbackVersionBid)
-	bidRoutes.PUT("/:id/submit_decision", SubmitDecisionBid)
+	bidRoutes.PUT("/:id/status", bidHandler.changeStatusBid)
+	bidRoutes.PUT("/:id/rollback/:version", bidHandler.rollbackVersionBid)
+	bidRoutes.PUT("/:id/submit_decision", bidHandler.submitDecisionBid)
 	//PATCH
-	bidRoutes.PATCH("/:id/edit", editBid)*/
+	bidRoutes.PATCH("/:id/edit", bidHandler.editBid)
 	//	bidRoutes.PUT("/:bidId/feedback", feedbackBid)
 	//	bidRoutes.GET("/:tenderId/reviews", getReviewsOfBid)
 
@@ -112,6 +112,7 @@ func (h BidHandler) getBidsListTender(c *gin.Context) {
 }
 
 func (h BidHandler) getUserBids(c *gin.Context) {
+	log.Info("Чтение параметров")
 	username := c.Query("username")
 	limit, offset := SetDefaultPaginationParamIfEmpty(c.Query("limit"), c.Query("offset"))
 
@@ -122,7 +123,7 @@ func (h BidHandler) getUserBids(c *gin.Context) {
 		return
 	}
 
-	log.Info("Чтение")
+	log.Info("Чтение данных")
 	bids, err := h.bid.GetListForUser(username, limit, offset)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
@@ -425,7 +426,7 @@ func (h BidHandler) rollbackVersionBid(c *gin.Context) {
 }
 
 // Расширенный процесс согласования
-func (h BidHandler) SubmitDecisionBid(c *gin.Context) {
+func (h BidHandler) submitDecisionBid(c *gin.Context) {
 	log.Info("Чтение параметров")
 	bidId := c.Param("id")
 	username := c.Query("username")

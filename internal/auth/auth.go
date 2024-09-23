@@ -31,7 +31,7 @@ func CheckUserViewTender(model db.TenderModel, username, tenderId string) errors
 func CheckUserCanManageBid(model db.BidModel, username, autorType, authorId string) errors.HttpError {
 	err := model.CheckUserCanManageBid(username, autorType, authorId)
 	if err == db.ErrorNoRows {
-		return errors.GetUserNotViewBidError()
+		return errors.GetUserNotAuthorOrResponsibleOrganizationError()
 	} else if err != nil {
 		return errors.GetInternalServerError(err)
 

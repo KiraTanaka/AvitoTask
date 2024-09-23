@@ -201,6 +201,6 @@ func (m BidModel) GetParamsByVersion(params *string, bidId string, version int) 
 
 func (m BidModel) GetListForUser(username, limit, offset string) ([]Bid, error) {
 	bids := []Bid{}
-	err := m.db.Select(&bids, getBidsByTenderQuery, username, limit, offset)
+	err := m.db.Select(&bids, getUserBidsQuery, username, limit, offset)
 	return bids, err
 }
