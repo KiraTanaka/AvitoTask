@@ -18,8 +18,8 @@ type Configuration struct {
 
 func GetConfig() (*Configuration, error) {
 	config := Configuration{}
-	err := cleanenv.ReadConfig(".env", &config)
-	//err := cleanenv.ReadEnv(&dbconfig)
+	//err := cleanenv.ReadConfig(".env", &config)
+	err := cleanenv.ReadEnv(&config)
 	if err != nil {
 		return nil, fmt.Errorf("Server config error: %w", err)
 	}
