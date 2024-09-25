@@ -1,634 +1,385 @@
 package http
 
 import (
-	"database/sql"
 	"encoding/json"
 	"net/http"
-	"slices"
-	"strconv"
-	"time"
 
 	validator "avitoTask/internal"
 	"avitoTask/internal/auth"
-	"avitoTask/internal/error"
+	db "avitoTask/internal/db"
+	"avitoTask/internal/errors"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
-	"github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
 )
 
-type tender struct {
-	Id              string `json:"id" db:"id" binding:"max=100"`
-	Name            string `json:"name" db:"name" binding:"required,max=100"`
-	Description     string `json:"description" db:"description" binding:"required,max=500"`
-	ServiceType     string `json:"serviceType" db:"service_type" binding:"required,oneof=Construction Delivery Manufacture"`
-	Status          string `json:"status" db:"status" binding:"required,oneof=Created Published Closed"`
-	Version         int    `json:"version" db:"version" binding:"required,min=1"`
-	OrganizationId  string `json:"organizationId" db:"organization_id" binding:"required,max=100"`
-	CreatedAt       string `json:"createdAt" db:"created_at" binding:"required"`
-	CreatorUsername string `json:"creatorUsername"`
-}
-type tenderDto struct {
-	Id          string `json:"id" db:"id" binding:"max=100"`
-	Name        string `json:"name" db:"name" binding:"required,max=100"`
-	Description string `json:"description" db:"description" binding:"required,max=500"`
-	ServiceType string `json:"serviceType" db:"service_type" binding:"required,oneof=Construction Delivery Manufacture"`
-	Status      string `json:"status" db:"status" binding:"required,oneof=Created Published Closed"`
-	Version     int    `json:"version" db:"version" binding:"required,min=1"`
-	CreatedAt   string `json:"createdAt" db:"created_at" binding:"required"`
+type TenderHandler struct {
+	tender       *db.TenderModel
+	user         *db.UserModel
+	organization *db.OrganizationModel
 }
 
-var StatusConst []string = []string{"Created", "Published", "Closed"}
-var ServiceTypesConst []string = []string{"Construction", "Delivery", "Manufacture"}
+type TenderDto struct {
+	Id          string `json:"id" binding:"max=100"`
+	Name        string `json:"name" binding:"required,max=100"`
+	Description string `json:"description" binding:"required,max=500"`
+	ServiceType string `json:"serviceType" binding:"required,oneof=Construction Delivery Manufacture"`
+	Status      string `json:"status" binding:"required,oneof=Created Published Closed"`
+	Version     int    `json:"version" binding:"required,min=1"`
+	CreatedAt   string `json:"createdAt" binding:"required"`
+}
 
-func InitTenderRoutes(routes *gin.RouterGroup) {
+var statusesConst []string = []string{"Created", "Published", "Closed"}
+var serviceTypesConst []string = []string{"Construction", "Delivery", "Manufacture"}
+
+func InitTenderRoutes(routes *gin.RouterGroup, tenderHandler *TenderHandler) {
 	tenderRoutes := routes.Group("/tenders")
 	//GET
-	tenderRoutes.GET("/", getTenders)
-	tenderRoutes.GET("/my", getUserTender)
-	tenderRoutes.GET("/:tenderId/status", getStatusTender)
+	tenderRoutes.GET("/", tenderHandler.getTenders)
+	tenderRoutes.GET("/my", tenderHandler.getUserTender)
+	tenderRoutes.GET("/:tenderId/status", tenderHandler.getStatusTender)
 	//POST
-	tenderRoutes.POST("/new", createTender)
+	tenderRoutes.POST("/new", tenderHandler.createTender)
 	//PUT
-	tenderRoutes.PUT("/:tenderId/status", changeStatusTender)
-	tenderRoutes.PUT("/:tenderId/rollback/:version", rollbackVersionTender)
+	tenderRoutes.PUT("/:tenderId/status", tenderHandler.changeStatusTender)
+	tenderRoutes.PUT("/:tenderId/rollback/:version", tenderHandler.rollbackVersionTender)
 	//PATCH
-	tenderRoutes.PATCH("/:tenderId/edit", editTender)
+	tenderRoutes.PATCH("/:tenderId/edit", tenderHandler.editTender)
 
 }
 
-func (t *tender) convertToDto() *tenderDto {
-	var tenderDto tenderDto
-	tenderDto.Id = t.Id
-	tenderDto.Name = t.Name
-	tenderDto.Description = t.Description
-	tenderDto.ServiceType = t.ServiceType
-	tenderDto.Status = t.Status
-	tenderDto.Version = t.Version
-	tenderDto.CreatedAt = t.CreatedAt
-	return &tenderDto
+func convertToDto(t *db.Tender) *TenderDto {
+	return &TenderDto{
+		Id:          t.Id,
+		Name:        t.Name,
+		Description: t.Description,
+		ServiceType: t.ServiceType,
+		Status:      t.Status,
+		Version:     t.Version,
+		CreatedAt:   t.CreatedAt,
+	}
 }
 
-func getTenders(c *gin.Context) {
+func (h *TenderHandler) getTenders(c *gin.Context) {
 	log.Info("Чтение параметров")
-	limit := c.Query("limit")
-	offset := c.Query("offset")
+	limit, offset := SetDefaultPaginationParamIfEmpty(c.Query("limit"), c.Query("offset"))
 
 	log.Info("Валидация")
-	if limit == "" {
-		limit = "5"
-	}
-	if offset == "" {
-		offset = "0"
-	}
 	serviceTypes := c.QueryArray("service_type")
-	for _, serviceType := range serviceTypes {
-		if !slices.Contains(ServiceTypesConst, serviceType) {
-			error.GetInvalidServiceTypeError(c)
-			return
-		}
-
+	errHttp := validator.CheckServiceTypes(serviceTypes, serviceTypesConst)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
+		return
 	}
 
 	log.Info("Чтение данных")
-	query := `
-		SELECT id,
-	       name,
-		   COALESCE(description,'') as description,
-	       status,
-	       service_type,
-	       version,
-	       created_at
-		FROM   tender
-		WHERE  service_type = ANY ( $1 )
-				OR $2 = 0
-		ORDER BY name
-		LIMIT $3 OFFSET $4`
-
-	var tenders []tenderDto
-	err := db.Select(&tenders, query, pq.Array(serviceTypes), len(serviceTypes), limit, offset)
+	tenders, err := h.tender.GetListByTypeOfService(serviceTypes, limit, offset)
 	if err != nil {
-		error.GetInternalServerError(c, err)
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
+	var tendersDto []TenderDto
+	for _, tender := range *tenders {
+		tendersDto = append(tendersDto, *convertToDto(&tender))
+	}
 
-	c.JSON(http.StatusOK, tenders)
+	c.JSON(http.StatusOK, tendersDto)
 }
 
-func getUserTender(c *gin.Context) {
+func (h *TenderHandler) getUserTender(c *gin.Context) {
 	log.Info("Чтение параметров")
-	limit := c.Query("limit")
-	offset := c.Query("offset")
+	limit, offset := SetDefaultPaginationParamIfEmpty(c.Query("limit"), c.Query("offset"))
 	username := c.Query("username")
+
 	log.Info("Валидация")
-	if limit == "" {
-		limit = "5"
-	}
-	if offset == "" {
-		offset = "0"
-	}
-	if username == "" {
-		error.GetUserNotPassedError(c)
-		return
-	}
-	err := validator.CheckUserExists(username)
-	if err == sql.ErrNoRows {
-		error.GetUserNotExistsOrIncorrectError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp := validator.CheckUser(h.user, username)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
-	log.Info("Чтение")
-	query := `SELECT t.id,
-					t.name,
-					COALESCE(t.description, '') AS description,
-					t.status,
-					t.service_type,
-					t.version,
-					t.created_at
-				FROM tender t
-					JOIN organization_responsible org_r ON org_r.organization_id = t.organization_id
-					JOIN employee e ON org_r.user_id = e.id
-				WHERE e.username = $1
-				ORDER BY name
-						LIMIT $2 OFFSET $3`
-	var tenders []tenderDto
-	err = db.Select(&tenders, query, username, limit, offset)
+	log.Info("Чтение данных")
+	tenders, err := h.tender.GetListForUser(username, limit, offset)
 	if err != nil {
-		error.GetInternalServerError(c, err)
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
 
-	c.JSON(http.StatusOK, tenders)
+	tendersDto := []TenderDto{}
+	for _, tender := range *tenders {
+		tendersDto = append(tendersDto, *convertToDto(&tender))
+	}
+
+	c.JSON(http.StatusOK, tendersDto)
 }
 
-func getStatusTender(c *gin.Context) {
+func (h *TenderHandler) getStatusTender(c *gin.Context) {
 	log.Info("Чтение параметров")
 	tenderId := c.Param("tenderId")
 	username := c.Query("username")
 
 	log.Info("Валидация")
-	if tenderId == "" {
-		error.GetTenderIdNotPassedError(c)
-		return
-	}
-	if err := uuid.Validate(tenderId); err != nil {
-		error.GetInvalidRequestFormatOrParametersError(c, err)
-		return
-	}
-	if username == "" {
-		error.GetUserNotPassedError(c)
+	errHttp := validator.CheckUser(h.user, username)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
-	err := validator.CheckUserExists(username)
-	if err == sql.ErrNoRows {
-		error.GetUserNotExistsOrIncorrectError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}
-
-	err = validator.CheckTenderExists(tenderId)
-	if err == sql.ErrNoRows {
-		error.GetTenderNotFoundError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp = validator.CheckTender(h.tender, tenderId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
 	log.Info("Авторизация")
-	err = auth.CheckUserViewTender(username, tenderId)
-	if err == sql.ErrNoRows {
-		error.GetUserNotViewTenderError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp = auth.CheckUserViewTender(h.tender, username, tenderId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
 	log.Info("Чтение данных")
-	var status string
-	err = db.Get(&status, "SELECT status FROM tender WHERE id = $1", tenderId)
+	status, err := h.tender.GetStatus(tenderId)
 	if err != nil {
-		error.GetInternalServerError(c, err)
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
+
 	c.JSON(http.StatusOK, status)
 }
 
-func createTender(c *gin.Context) {
+func (h *TenderHandler) createTender(c *gin.Context) {
 	log.Info("Чтение параметров")
-	someTender := tender{Version: 1, CreatedAt: time.Now().Format(time.RFC3339), Status: "Created"}
-	err := c.BindJSON(&someTender)
+	someTender := db.TenderDefault()
+	err := c.BindJSON(someTender)
 	if err != nil {
-		error.GetInvalidRequestFormatOrParametersError(c, err)
+		c.AbortWithStatusJSON(errors.GetInvalidRequestFormatOrParametersError(err).SeparateCode())
 		return
 	}
+
 	log.Info("Валидация")
-	if err := uuid.Validate(someTender.OrganizationId); err != nil {
-		error.GetInvalidRequestFormatOrParametersError(c, err)
+	errHttp := validator.ServiceTypeIsAcceptable(someTender.ServiceType, serviceTypesConst)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
-	err = validator.CheckUserExists(someTender.CreatorUsername)
-	if err == sql.ErrNoRows {
-		error.GetUserNotExistsOrIncorrectError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp = validator.CheckUser(h.user, someTender.CreatorUsername)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
-	err = validator.CheckOrganizationExists(someTender.OrganizationId)
-	if err == sql.ErrNoRows {
-		error.GetOrganizationNotExistsOrIncorrectError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp = validator.CheckOrganization(h.organization, someTender.OrganizationId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
 	log.Info("Авторизация")
-	err = auth.CheckUserCanManageTender(someTender.CreatorUsername, someTender.OrganizationId)
-	if err == sql.ErrNoRows {
-		error.GetUserNotResponsibleOrganizationError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp = auth.CheckUserCanManageTender(h.tender, someTender.CreatorUsername, someTender.OrganizationId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
 	log.Info("Создание")
-	var lastInsertId string
-	tx, err := db.Beginx()
+	err = h.tender.Create(someTender)
 	if err != nil {
-		error.GetInternalServerError(c, err)
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
-	defer tx.Rollback()
-	err = tx.QueryRow(`INSERT INTO tender
-									(name,
-									description,
-									service_type,
-									status,
-									organization_id,
-									version,
-									created_at)
-						VALUES     ($1,
-									$2,
-									$3,
-									$4,
-									$5,
-									$6,
-									$7)
-						RETURNING id`, someTender.Name, someTender.Description, someTender.ServiceType, someTender.Status, someTender.OrganizationId,
-		someTender.Version, someTender.CreatedAt).Scan(&lastInsertId)
-	if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}
-	tx.Commit()
-	someTender.Id = lastInsertId
 
-	c.JSON(http.StatusOK, someTender.convertToDto())
+	c.JSON(http.StatusOK, convertToDto(someTender))
 }
 
-func changeStatusTender(c *gin.Context) {
+func (h *TenderHandler) changeStatusTender(c *gin.Context) {
 	log.Info("Чтение параметров")
 	status := c.Query("status")
 	username := c.Query("username")
 	tenderId := c.Param("tenderId")
 
 	log.Info("Валидация")
-	if status == "" {
-		error.GetNewStatusNotPassedError(c)
-		return
-	}
-	if !slices.Contains(StatusConst, status) {
-		error.GetInvalidStatusError(c)
+	errHttp := validator.CheckStatus(status, statusesConst)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
-	if tenderId == "" {
-		error.GetTenderIdNotPassedError(c)
-		return
-	}
-	if err := uuid.Validate(tenderId); err != nil {
-		error.GetInvalidRequestFormatOrParametersError(c, err)
-		return
-	}
-	err := validator.CheckTenderExists(tenderId)
-	if err == sql.ErrNoRows {
-		error.GetTenderNotFoundError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp = validator.CheckTender(h.tender, tenderId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
-	if username == "" {
-		error.GetUserNotPassedError(c)
-		return
-	}
-	err = validator.CheckUserExists(username)
-	if err == sql.ErrNoRows {
-		error.GetUserNotExistsOrIncorrectError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp = validator.CheckUser(h.user, username)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
-	log.Info("Чтение данных")
-	var tender tender
-	err = db.Get(&tender, `SELECT id,
-								name,
-								COALESCE(description,'') as description,
-								status,
-								service_type,
-								organization_id,
-								version,
-								created_at
-							FROM tender WHERE id = $1`, tenderId)
+	log.Info("Чтение дополнительных данных")
+	tender := db.TenderDefault()
+	tender, err := h.tender.Get(tenderId)
 	if err != nil {
-		error.GetInternalServerError(c, err)
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
 
 	log.Info("Авторизация")
-	err = auth.CheckUserCanManageTender(username, tender.OrganizationId)
-	if err == sql.ErrNoRows {
-		error.GetUserNotResponsibleOrganizationError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp = auth.CheckUserCanManageTender(h.tender, username, tender.OrganizationId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
 	log.Info("Изменение")
-	tx, err := db.Beginx()
+	err = h.tender.ChangeStatus(status, tender.Id)
 	if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}
-	defer tx.Rollback()
-	_, err = tx.Exec("UPDATE tender SET status = $1 WHERE id = $2", status, tender.Id)
-	if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}
-	tx.Commit()
-
-	log.Info("Чтение данных")
-	err = db.Get(&tender, `SELECT id,
-								name,
-								COALESCE(description,'') as description,
-								status,
-								service_type,
-								organization_id,
-								version,
-								created_at
-							FROM tender
-							WHERE id = $1`, tender.Id)
-	if err != nil {
-		error.GetInternalServerError(c, err)
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
 
-	c.JSON(http.StatusOK, tender.convertToDto())
+	log.Info("Чтение измененных данных")
+	tender, err = h.tender.Get(tender.Id)
+	if err != nil {
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
+		return
+	}
+
+	c.JSON(http.StatusOK, convertToDto(tender))
 }
 
-func editTender(c *gin.Context) {
+func (h *TenderHandler) editTender(c *gin.Context) {
 	log.Info("Чтение параметров")
 	tenderId := c.Param("tenderId")
 	username := c.Query("username")
 
 	log.Info("Валидация")
-	if tenderId == "" {
-		error.GetTenderIdNotPassedError(c)
-		return
-	}
-	if err := uuid.Validate(tenderId); err != nil {
-		error.GetInvalidRequestFormatOrParametersError(c, err)
-		return
-	}
-	err := validator.CheckTenderExists(tenderId)
-	if err == sql.ErrNoRows {
-		error.GetTenderNotFoundError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp := validator.CheckTender(h.tender, tenderId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
-	if username == "" {
-		error.GetUserNotPassedError(c)
-		return
-	}
-	err = validator.CheckUserExists(username)
-	if err == sql.ErrNoRows {
-		error.GetUserNotExistsOrIncorrectError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp = validator.CheckUser(h.user, username)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
-	log.Info("Чтение данных")
-	var tender tender
-	err = db.Get(&tender, `SELECT id,
-								name,
-								COALESCE(description,'') as description,
-								status,
-								service_type,
-								organization_id,
-								version,
-								created_at
-							FROM tender WHERE id = $1`, tenderId)
+	log.Info("Чтение исходных данных")
+	tender, err := h.tender.Get(tenderId)
 	if err != nil {
-		error.GetInternalServerError(c, err)
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
 
-	err = c.BindJSON(&tender)
+	log.Info("Чтение новых значений")
+	err = c.BindJSON(tender)
 	if err != nil {
-		error.GetInvalidRequestFormatOrParametersError(c, err)
+		c.AbortWithStatusJSON(errors.GetInvalidRequestFormatOrParametersError(err).SeparateCode())
 		return
 	}
-	if !slices.Contains(ServiceTypesConst, tender.ServiceType) {
-		error.GetInvalidServiceTypeError(c)
+
+	errHttp = validator.ServiceTypeIsAcceptable(tender.ServiceType, serviceTypesConst)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
 	log.Info("Авторизация")
-	err = auth.CheckUserCanManageTender(username, tender.OrganizationId)
-	if err == sql.ErrNoRows {
-		error.GetUserNotResponsibleOrganizationError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp = auth.CheckUserCanManageTender(h.tender, username, tender.OrganizationId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
 	log.Info("Изменение")
-	query := `UPDATE tender
-				SET    name = :name,
-						description = :description,
-						service_type = :service_type
-				WHERE  id = :id`
-
-	tx, err := db.Beginx()
+	err = h.tender.Edit(tender)
 	if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}
-	defer tx.Rollback()
-
-	_, err = tx.NamedExec(query, tender)
-	if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}
-	tx.Commit()
-
-	log.Info("Чтение данных")
-	err = db.Get(&tender, `SELECT id,
-								name,
-								COALESCE(description,'') as description,
-								status,
-								service_type,
-								organization_id,
-								version,
-								created_at
-							FROM tender
-							WHERE id = $1`, tenderId)
-	if err != nil {
-		error.GetInternalServerError(c, err)
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
 
-	c.JSON(http.StatusOK, tender.convertToDto())
+	log.Info("Чтение измененных данных")
+	tender, err = h.tender.Get(tender.Id)
+	if err != nil {
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
+		return
+	}
+
+	c.JSON(http.StatusOK, convertToDto(tender))
 }
-func rollbackVersionTender(c *gin.Context) {
+func (h *TenderHandler) rollbackVersionTender(c *gin.Context) {
 	log.Info("Чтение параметров")
 	tenderId := c.Param("tenderId")
 	username := c.Query("username")
 
 	log.Info("Валидация")
-	if tenderId == "" {
-		error.GetTenderIdNotPassedError(c)
-		return
-	}
-	if err := uuid.Validate(tenderId); err != nil {
-		error.GetInvalidRequestFormatOrParametersError(c, err)
-		return
-	}
-	err := validator.CheckTenderExists(tenderId)
-	if err == sql.ErrNoRows {
-		error.GetTenderNotFoundError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+	errHttp := validator.CheckTender(h.tender, tenderId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
 		return
 	}
 
-	version, err := strconv.Atoi(c.Param("version"))
+	version, errHttp := validator.CheckVersion(c.Param("version"))
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
+		return
+	}
+
+	errHttp = validator.CheckUser(h.user, username)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
+		return
+	}
+
+	log.Info("Чтение исходных данных")
+	tender, err := h.tender.Get(tenderId)
 	if err != nil {
-		error.GetInvalidRequestFormatOrParametersError(c, err)
-		return
-	}
-
-	if username == "" {
-		error.GetUserNotPassedError(c)
-		return
-	}
-	err = validator.CheckUserExists(username)
-	if err == sql.ErrNoRows {
-		error.GetUserNotExistsOrIncorrectError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}
-
-	log.Info("Чтение данных")
-	var tender tender
-	err = db.Get(&tender, `SELECT id,
-								name,
-								COALESCE(description,'') as description,
-								status,
-								service_type,
-								organization_id,
-								version,
-								created_at
-							FROM tender WHERE id = $1`, tenderId)
-	if err != nil {
-		error.GetInternalServerError(c, err)
-		return
-	}
-
-	log.Info("Авторизация")
-	err = auth.CheckUserCanManageTender(username, tender.OrganizationId)
-	if err == sql.ErrNoRows {
-		error.GetUserNotResponsibleOrganizationError(c)
-		return
-	} else if err != nil {
-		error.GetInternalServerError(c, err)
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
 
 	if version >= tender.Version {
-		error.GetInvalidVersionError(c)
+		c.AbortWithStatusJSON(errors.GetVersionIsOutOfBoundsError().SeparateCode())
 		return
 	}
 
-	log.Info("Чтение данных")
-	var params string
-	err = db.Get(&params, `SELECT params 
-							FROM tender_version_hist 
-							WHERE tender_id = $1 AND version = $2`, tender.Id, version)
+	log.Info("Авторизация")
+	errHttp = auth.CheckUserCanManageTender(h.tender, username, tender.OrganizationId)
+	if !errHttp.IsEmpty() {
+		c.AbortWithStatusJSON(errHttp.SeparateCode())
+		return
+	}
+
+	log.Info("Чтение данных версии")
+	params, err := h.tender.GetParamsByVersion(tender.Id, version)
 	if err != nil {
-		error.GetVersionNotFoundError(c)
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
-	json.Unmarshal([]byte(params), &tender)
 
-	log.Info("Изменение")
-	query := `UPDATE tender
-				SET    name = :name,
-						description = :description,
-						service_type = :service_type
-				WHERE  id = :id`
-
-	tx := db.MustBegin()
-	_, err = tx.NamedExec(query, &tender)
+	err = json.Unmarshal([]byte(params), &tender)
 	if err != nil {
-		error.GetInternalServerError(c, err)
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
-	tx.Commit()
 
-	log.Info("Чтение данных")
-	err = db.Get(&tender, `SELECT id,
-								name,
-								COALESCE(description,'') as description,
-								status,
-								service_type,
-								organization_id,
-								version,
-								created_at
-							FROM tender
-							WHERE id = $1`, tenderId)
+	log.Info("Откат до версии")
+	err = h.tender.Edit(tender)
 	if err != nil {
-		error.GetInternalServerError(c, err)
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
 
-	c.JSON(http.StatusOK, tender.convertToDto())
+	log.Info("Чтение измененных данных")
+	tender, err = h.tender.Get(tender.Id)
+	if err != nil {
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
+		return
+	}
+
+	c.JSON(http.StatusOK, convertToDto(tender))
 }
