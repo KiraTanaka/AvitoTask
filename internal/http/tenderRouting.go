@@ -14,12 +14,12 @@ import (
 )
 
 type TenderHandler struct {
-	tender       db.TenderModel
-	user         db.UserModel
-	organization db.OrganizationModel
+	tender       *db.TenderModel
+	user         *db.UserModel
+	organization *db.OrganizationModel
 }
 
-type tenderDto struct {
+type TenderDto struct {
 	Id          string `json:"id" binding:"max=100"`
 	Name        string `json:"name" binding:"required,max=100"`
 	Description string `json:"description" binding:"required,max=500"`
@@ -48,19 +48,19 @@ func InitTenderRoutes(routes *gin.RouterGroup, tenderHandler *TenderHandler) {
 
 }
 
-func convertToDto(t db.Tender) tenderDto {
-	var tenderDto tenderDto
-	tenderDto.Id = t.Id
-	tenderDto.Name = t.Name
-	tenderDto.Description = t.Description
-	tenderDto.ServiceType = t.ServiceType
-	tenderDto.Status = t.Status
-	tenderDto.Version = t.Version
-	tenderDto.CreatedAt = t.CreatedAt
-	return tenderDto
+func convertToDto(t *db.Tender) *TenderDto {
+	return &TenderDto{
+		Id:          t.Id,
+		Name:        t.Name,
+		Description: t.Description,
+		ServiceType: t.ServiceType,
+		Status:      t.Status,
+		Version:     t.Version,
+		CreatedAt:   t.CreatedAt,
+	}
 }
 
-func (h TenderHandler) getTenders(c *gin.Context) {
+func (h *TenderHandler) getTenders(c *gin.Context) {
 	log.Info("Чтение параметров")
 	limit, offset := SetDefaultPaginationParamIfEmpty(c.Query("limit"), c.Query("offset"))
 
@@ -78,15 +78,15 @@ func (h TenderHandler) getTenders(c *gin.Context) {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
-	tendersDto := []tenderDto{}
-	for _, tender := range tenders {
-		tendersDto = append(tendersDto, convertToDto(tender))
+	var tendersDto []TenderDto
+	for _, tender := range *tenders {
+		tendersDto = append(tendersDto, *convertToDto(&tender))
 	}
 
 	c.JSON(http.StatusOK, tendersDto)
 }
 
-func (h TenderHandler) getUserTender(c *gin.Context) {
+func (h *TenderHandler) getUserTender(c *gin.Context) {
 	log.Info("Чтение параметров")
 	limit, offset := SetDefaultPaginationParamIfEmpty(c.Query("limit"), c.Query("offset"))
 	username := c.Query("username")
@@ -105,15 +105,15 @@ func (h TenderHandler) getUserTender(c *gin.Context) {
 		return
 	}
 
-	tendersDto := []tenderDto{}
-	for _, tender := range tenders {
-		tendersDto = append(tendersDto, convertToDto(tender))
+	tendersDto := []TenderDto{}
+	for _, tender := range *tenders {
+		tendersDto = append(tendersDto, *convertToDto(&tender))
 	}
 
 	c.JSON(http.StatusOK, tendersDto)
 }
 
-func (h TenderHandler) getStatusTender(c *gin.Context) {
+func (h *TenderHandler) getStatusTender(c *gin.Context) {
 	log.Info("Чтение параметров")
 	tenderId := c.Param("tenderId")
 	username := c.Query("username")
@@ -139,8 +139,7 @@ func (h TenderHandler) getStatusTender(c *gin.Context) {
 	}
 
 	log.Info("Чтение данных")
-	var status string
-	err := h.tender.GetStatus(&status, tenderId)
+	status, err := h.tender.GetStatus(tenderId)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
@@ -149,10 +148,10 @@ func (h TenderHandler) getStatusTender(c *gin.Context) {
 	c.JSON(http.StatusOK, status)
 }
 
-func (h TenderHandler) createTender(c *gin.Context) {
+func (h *TenderHandler) createTender(c *gin.Context) {
 	log.Info("Чтение параметров")
 	someTender := db.TenderDefault()
-	err := c.BindJSON(&someTender)
+	err := c.BindJSON(someTender)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInvalidRequestFormatOrParametersError(err).SeparateCode())
 		return
@@ -185,7 +184,7 @@ func (h TenderHandler) createTender(c *gin.Context) {
 	}
 
 	log.Info("Создание")
-	err = h.tender.Create(&someTender)
+	err = h.tender.Create(someTender)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
@@ -194,7 +193,7 @@ func (h TenderHandler) createTender(c *gin.Context) {
 	c.JSON(http.StatusOK, convertToDto(someTender))
 }
 
-func (h TenderHandler) changeStatusTender(c *gin.Context) {
+func (h *TenderHandler) changeStatusTender(c *gin.Context) {
 	log.Info("Чтение параметров")
 	status := c.Query("status")
 	username := c.Query("username")
@@ -221,7 +220,7 @@ func (h TenderHandler) changeStatusTender(c *gin.Context) {
 
 	log.Info("Чтение дополнительных данных")
 	tender := db.TenderDefault()
-	err := h.tender.Get(&tender, tenderId)
+	tender, err := h.tender.Get(tenderId)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
@@ -242,7 +241,7 @@ func (h TenderHandler) changeStatusTender(c *gin.Context) {
 	}
 
 	log.Info("Чтение измененных данных")
-	err = h.tender.Get(&tender, tender.Id)
+	tender, err = h.tender.Get(tender.Id)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
@@ -251,7 +250,7 @@ func (h TenderHandler) changeStatusTender(c *gin.Context) {
 	c.JSON(http.StatusOK, convertToDto(tender))
 }
 
-func (h TenderHandler) editTender(c *gin.Context) {
+func (h *TenderHandler) editTender(c *gin.Context) {
 	log.Info("Чтение параметров")
 	tenderId := c.Param("tenderId")
 	username := c.Query("username")
@@ -270,15 +269,14 @@ func (h TenderHandler) editTender(c *gin.Context) {
 	}
 
 	log.Info("Чтение исходных данных")
-	tender := db.TenderDefault()
-	err := h.tender.Get(&tender, tenderId)
+	tender, err := h.tender.Get(tenderId)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
 
 	log.Info("Чтение новых значений")
-	err = c.BindJSON(&tender)
+	err = c.BindJSON(tender)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInvalidRequestFormatOrParametersError(err).SeparateCode())
 		return
@@ -298,14 +296,14 @@ func (h TenderHandler) editTender(c *gin.Context) {
 	}
 
 	log.Info("Изменение")
-	err = h.tender.Edit(&tender)
+	err = h.tender.Edit(tender)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
 
 	log.Info("Чтение измененных данных")
-	err = h.tender.Get(&tender, tender.Id)
+	tender, err = h.tender.Get(tender.Id)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
@@ -313,7 +311,7 @@ func (h TenderHandler) editTender(c *gin.Context) {
 
 	c.JSON(http.StatusOK, convertToDto(tender))
 }
-func (h TenderHandler) rollbackVersionTender(c *gin.Context) {
+func (h *TenderHandler) rollbackVersionTender(c *gin.Context) {
 	log.Info("Чтение параметров")
 	tenderId := c.Param("tenderId")
 	username := c.Query("username")
@@ -338,8 +336,7 @@ func (h TenderHandler) rollbackVersionTender(c *gin.Context) {
 	}
 
 	log.Info("Чтение исходных данных")
-	tender := db.TenderDefault()
-	err := h.tender.Get(&tender, tenderId)
+	tender, err := h.tender.Get(tenderId)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
@@ -358,24 +355,27 @@ func (h TenderHandler) rollbackVersionTender(c *gin.Context) {
 	}
 
 	log.Info("Чтение данных версии")
-	var params string
-	err = h.tender.GetParamsByVersion(&params, tender.Id, version)
+	params, err := h.tender.GetParamsByVersion(tender.Id, version)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
 
-	json.Unmarshal([]byte(params), &tender)
+	err = json.Unmarshal([]byte(params), &tender)
+	if err != nil {
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
+		return
+	}
 
 	log.Info("Откат до версии")
-	err = h.tender.Edit(&tender)
+	err = h.tender.Edit(tender)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
 
 	log.Info("Чтение измененных данных")
-	err = h.tender.Get(&tender, tender.Id)
+	tender, err = h.tender.Get(tender.Id)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return

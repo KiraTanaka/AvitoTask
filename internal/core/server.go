@@ -10,7 +10,7 @@ import (
 
 type Server struct {
 	Config *config.Configuration
-	Routes http.RouteHandler
+	Routes *http.RouteHandler
 }
 
 func NewServer() (*Server, error) {
@@ -27,7 +27,7 @@ func NewServer() (*Server, error) {
 		log.Error(err)
 		return nil, err
 	}
-	server.Routes.InitRoutes(db)
+	server.Routes = http.InitRoutes(db)
 	return server, nil
 }
 

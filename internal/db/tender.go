@@ -57,48 +57,52 @@ var editTenderQuery string
 //go:embed queries/tender/getParamsTenderByVersion.sql
 var getParamsTenderByVersionQuery string
 
-func TenderDefault() Tender {
-	return Tender{Version: 1,
+func TenderDefault() *Tender {
+	return &Tender{
+		Version:   1,
 		CreatedAt: time.Now().Format(time.RFC3339),
-		Status:    "Created"}
+		Status:    "Created",
+	}
 }
 
-func (m TenderModel) CheckExists(tenderId string) error {
+func (m *TenderModel) CheckExists(tenderId string) error {
 	var tenderExists bool
 	return m.db.Get(&tenderExists, checkTenderExistsQuery, tenderId)
 }
 
-func (m TenderModel) CheckUserCanManage(username, organizationId string) error {
+func (m *TenderModel) CheckUserCanManage(username, organizationId string) error {
 	var isResponsibleOrganization bool
 	return m.db.Get(&isResponsibleOrganization, checkUserCanManageTenderQuery, organizationId, username)
 }
-func (m TenderModel) CheckUserView(username, tenderId string) error {
+func (m *TenderModel) CheckUserView(username, tenderId string) error {
 	var canView bool
 	return m.db.Get(&canView, checkUserViewTenderQuery, tenderId, username)
 }
-func (m TenderModel) GetListByTypeOfService(serviceTypes []string, limit string, offset string) ([]Tender, error) {
+func (m *TenderModel) GetListByTypeOfService(serviceTypes []string, limit string, offset string) (*[]Tender, error) {
 	tenders := []Tender{}
 	err := m.db.Select(&tenders, getTendersByTypeOfServiceQuery, pq.Array(serviceTypes), len(serviceTypes), limit, offset)
-	return tenders, err
+	return &tenders, err
 }
 
-func (m TenderModel) GetListForUser(username, limit, offset string) ([]Tender, error) {
+func (m *TenderModel) GetListForUser(username, limit, offset string) (*[]Tender, error) {
 	tenders := []Tender{}
 	err := m.db.Select(&tenders, getUserTendersQuery, username, limit, offset)
-	return tenders, err
+	return &tenders, err
 }
 
-func (m TenderModel) GetStatus(status *string, tenderId string) error {
-	err := m.db.Get(status, getStatusTenderQuery, tenderId)
-	return err
+func (m *TenderModel) GetStatus(tenderId string) (string, error) {
+	var status string
+	err := m.db.Get(&status, getStatusTenderQuery, tenderId)
+	return status, err
 }
 
-func (m TenderModel) Get(tender *Tender, tenderId string) error {
+func (m *TenderModel) Get(tenderId string) (*Tender, error) {
+	tender := TenderDefault()
 	err := m.db.Get(tender, getTenderQuery, tenderId)
-	return err
+	return tender, err
 }
 
-func (m TenderModel) Create(tender *Tender) error {
+func (m *TenderModel) Create(tender *Tender) error {
 	var lastInsertId string
 	tx, err := m.db.Beginx()
 	if err != nil {
@@ -116,7 +120,7 @@ func (m TenderModel) Create(tender *Tender) error {
 	return nil
 }
 
-func (m TenderModel) Edit(tender *Tender) error {
+func (m *TenderModel) Edit(tender *Tender) error {
 	tx, err := m.db.Beginx()
 	if err != nil {
 		return err
@@ -131,7 +135,7 @@ func (m TenderModel) Edit(tender *Tender) error {
 	return nil
 }
 
-func (m TenderModel) ChangeStatus(status string, tenderId string, txs ...*sqlx.Tx) error {
+func (m *TenderModel) ChangeStatus(status string, tenderId string, txs ...*sqlx.Tx) error {
 	var tx *sqlx.Tx
 	var err error
 	if len(txs) == 1 {
@@ -155,7 +159,8 @@ func (m TenderModel) ChangeStatus(status string, tenderId string, txs ...*sqlx.T
 	return nil
 }
 
-func (m TenderModel) GetParamsByVersion(params *string, tenderId string, version int) error {
-	err := m.db.Get(params, getParamsTenderByVersionQuery, tenderId, version)
-	return err
+func (m *TenderModel) GetParamsByVersion(tenderId string, version int) (string, error) {
+	var params string
+	err := m.db.Get(&params, getParamsTenderByVersionQuery, tenderId, version)
+	return params, err
 }

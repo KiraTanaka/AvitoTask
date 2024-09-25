@@ -5,7 +5,7 @@ import (
 	errors "avitoTask/internal/errors"
 )
 
-func CheckUserCanManageTender(model db.TenderModel, username, organizationId string) errors.HttpError {
+func CheckUserCanManageTender(model *db.TenderModel, username, organizationId string) errors.HttpError {
 
 	err := model.CheckUserCanManage(username, organizationId)
 	if err == db.ErrorNoRows {
@@ -17,7 +17,7 @@ func CheckUserCanManageTender(model db.TenderModel, username, organizationId str
 	}
 	return errors.HttpError{}
 }
-func CheckUserViewTender(model db.TenderModel, username, tenderId string) errors.HttpError {
+func CheckUserViewTender(model *db.TenderModel, username, tenderId string) errors.HttpError {
 	err := model.CheckUserView(username, tenderId)
 	if err == db.ErrorNoRows {
 		return errors.GetUserNotViewTenderError()
@@ -28,7 +28,7 @@ func CheckUserViewTender(model db.TenderModel, username, tenderId string) errors
 	return errors.HttpError{}
 }
 
-func CheckUserCanManageBid(model db.BidModel, username, autorType, authorId string) errors.HttpError {
+func CheckUserCanManageBid(model *db.BidModel, username, autorType, authorId string) errors.HttpError {
 	err := model.CheckUserCanManageBid(username, autorType, authorId)
 	if err == db.ErrorNoRows {
 		return errors.GetUserNotAuthorOrResponsibleOrganizationError()
@@ -39,7 +39,7 @@ func CheckUserCanManageBid(model db.BidModel, username, autorType, authorId stri
 	return errors.HttpError{}
 }
 
-func CheckUserViewBid(model db.BidModel, username, bidId string) errors.HttpError {
+func CheckUserViewBid(model *db.BidModel, username, bidId string) errors.HttpError {
 	err := model.CheckUserView(username, bidId)
 	if err == db.ErrorNoRows {
 		return errors.GetUserNotViewBidError()
@@ -50,7 +50,7 @@ func CheckUserViewBid(model db.BidModel, username, bidId string) errors.HttpErro
 	return errors.HttpError{}
 }
 
-func CheckUserCanApproveBid(model db.BidModel, username, tenderId string) errors.HttpError {
+func CheckUserCanApproveBid(model *db.BidModel, username, tenderId string) errors.HttpError {
 	err := model.CheckUserCanApproveBid(username, tenderId)
 	if err == db.ErrorNoRows {
 		return errors.GetUserNotResponsibleOrganizationError()

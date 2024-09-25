@@ -15,13 +15,13 @@ import (
 )
 
 type BidHandler struct {
-	bid          db.BidModel
-	tender       db.TenderModel
-	user         db.UserModel
-	organization db.OrganizationModel
+	bid          *db.BidModel
+	tender       *db.TenderModel
+	user         *db.UserModel
+	organization *db.OrganizationModel
 }
 
-type bidDto struct {
+type BidDto struct {
 	Id         string `json:"id" db:"id" binding:"max=100"`
 	Name       string `json:"name" db:"name" binding:"required,max=100"`
 	Status     string `json:"status" db:"status" binding:"required,oneof=Created Published Closed"`
@@ -61,16 +61,16 @@ func InitBidRoutes(routes *gin.RouterGroup, bidHandler *BidHandler) {
 
 }
 
-func bidConvertToDto(t db.Bid) bidDto {
-	var bidDto bidDto
-	bidDto.Id = t.Id
-	bidDto.Name = t.Name
-	bidDto.AuthorType = t.AuthorType
-	bidDto.AuthorId = t.AuthorId
-	bidDto.Status = t.Status
-	bidDto.Version = t.Version
-	bidDto.CreatedAt = t.CreatedAt
-	return bidDto
+func bidConvertToDto(t *db.Bid) *BidDto {
+	return &BidDto{
+		Id:         t.Id,
+		Name:       t.Name,
+		AuthorType: t.AuthorType,
+		AuthorId:   t.AuthorId,
+		Status:     t.Status,
+		Version:    t.Version,
+		CreatedAt:  t.CreatedAt,
+	}
 }
 
 // По заданию непонятно какие права должны быть
@@ -103,9 +103,9 @@ func (h BidHandler) getBidsListTender(c *gin.Context) {
 		return
 	}
 
-	bidsDto := []bidDto{}
-	for _, bid := range bids {
-		bidsDto = append(bidsDto, bidConvertToDto(bid))
+	bidsDto := []BidDto{}
+	for _, bid := range *bids {
+		bidsDto = append(bidsDto, *bidConvertToDto(&bid))
 	}
 
 	c.JSON(http.StatusOK, bidsDto)
@@ -130,9 +130,9 @@ func (h BidHandler) getUserBids(c *gin.Context) {
 		return
 	}
 
-	bidsDto := []bidDto{}
-	for _, bid := range bids {
-		bidsDto = append(bidsDto, bidConvertToDto(bid))
+	bidsDto := []BidDto{}
+	for _, bid := range *bids {
+		bidsDto = append(bidsDto, *bidConvertToDto(&bid))
 	}
 
 	c.JSON(http.StatusOK, bidsDto)
@@ -164,8 +164,7 @@ func (h BidHandler) getStatusBid(c *gin.Context) {
 	}
 
 	log.Info("Чтение данных")
-	var status string
-	err := h.bid.GetStatus(&status, bidId)
+	status, err := h.bid.GetStatus(bidId)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
@@ -177,7 +176,7 @@ func (h BidHandler) getStatusBid(c *gin.Context) {
 func (h BidHandler) createBid(c *gin.Context) {
 	log.Info("Чтение параметров")
 	someBid := db.BidDefault()
-	err := c.BindJSON(&someBid)
+	err := c.BindJSON(someBid)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInvalidRequestFormatOrParametersError(err).SeparateCode())
 		return
@@ -224,7 +223,7 @@ func (h BidHandler) createBid(c *gin.Context) {
 	}
 
 	log.Info("Создание")
-	err = h.bid.Create(&someBid)
+	err = h.bid.Create(someBid)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
@@ -260,8 +259,7 @@ func (h BidHandler) changeStatusBid(c *gin.Context) {
 	}
 
 	log.Info("Чтение дополнительных данных")
-	bid := db.BidDefault()
-	err := h.bid.Get(&bid, bidId)
+	bid, err := h.bid.Get(bidId)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
@@ -282,7 +280,7 @@ func (h BidHandler) changeStatusBid(c *gin.Context) {
 	}
 
 	log.Info("Чтение измененных данных")
-	err = h.bid.Get(&bid, bid.Id)
+	bid, err = h.bid.Get(bid.Id)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
@@ -310,15 +308,14 @@ func (h BidHandler) editBid(c *gin.Context) {
 	}
 
 	log.Info("Чтение исходных данных")
-	bid := db.BidDefault()
-	err := h.bid.Get(&bid, bidId)
+	bid, err := h.bid.Get(bidId)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
 
 	log.Info("Чтение новых значений")
-	err = c.BindJSON(&bid)
+	err = c.BindJSON(bid)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInvalidRequestFormatOrParametersError(err).SeparateCode())
 		return
@@ -338,14 +335,14 @@ func (h BidHandler) editBid(c *gin.Context) {
 	}
 
 	log.Info("Изменение")
-	err = h.bid.Edit(&bid)
+	err = h.bid.Edit(bid)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
 
 	log.Info("Чтение измененных данных")
-	err = h.bid.Get(&bid, bid.Id)
+	bid, err = h.bid.Get(bid.Id)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
@@ -379,8 +376,7 @@ func (h BidHandler) rollbackVersionBid(c *gin.Context) {
 	}
 
 	log.Info("Чтение исходных данных")
-	bid := db.BidDefault()
-	err := h.bid.Get(&bid, bidId)
+	bid, err := h.bid.Get(bidId)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
@@ -399,24 +395,27 @@ func (h BidHandler) rollbackVersionBid(c *gin.Context) {
 	}
 
 	log.Info("Чтение данных версии")
-	var params string
-	err = h.bid.GetParamsByVersion(&params, bid.Id, version)
+	params, err := h.bid.GetParamsByVersion(bid.Id, version)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
 
-	json.Unmarshal([]byte(params), &bid)
+	err = json.Unmarshal([]byte(params), &bid)
+	if err != nil {
+		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
+		return
+	}
 
 	log.Info("Откат до версии")
-	err = h.bid.Edit(&bid)
+	err = h.bid.Edit(bid)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
 	}
 
 	log.Info("Чтение измененных данных")
-	err = h.bid.Get(&bid, bid.Id)
+	bid, err = h.bid.Get(bid.Id)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return
@@ -452,8 +451,7 @@ func (h BidHandler) submitDecisionBid(c *gin.Context) {
 	}
 
 	log.Info("Чтение дополнительных данных")
-	bid := db.BidDefault()
-	err := h.bid.Get(&bid, bidId)
+	bid, err := h.bid.Get(bidId)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.GetInternalServerError(err).SeparateCode())
 		return

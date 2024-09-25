@@ -10,22 +10,25 @@ import (
 )
 
 type RouteHandler struct {
-	TenderHandler TenderHandler
-	BidHandler    BidHandler
+	TenderHandler *TenderHandler
+	BidHandler    *BidHandler
 	Routes        *gin.Engine
 }
 
-func (route *RouteHandler) InitRoutes(dbModels db.DbModels) {
-	route.Routes = gin.Default()
-	route.TenderHandler = TenderHandler{tender: dbModels.TenderModel, user: dbModels.UserModel, organization: dbModels.OrganizationModel}
-	route.BidHandler = BidHandler{bid: dbModels.BidModel, tender: dbModels.TenderModel, user: dbModels.UserModel, organization: dbModels.OrganizationModel}
+func InitRoutes(dbModels *db.DbModels) *RouteHandler {
+	route := RouteHandler{
+		Routes:        gin.Default(),
+		TenderHandler: &TenderHandler{tender: dbModels.TenderModel, user: dbModels.UserModel, organization: dbModels.OrganizationModel},
+		BidHandler:    &BidHandler{bid: dbModels.BidModel, tender: dbModels.TenderModel, user: dbModels.UserModel, organization: dbModels.OrganizationModel},
+	}
 
 	route.Routes.GET("/", hello)
 	routeGroup := route.Routes.Group("/api")
 	routeGroup.GET("/ping", ping)
 
-	InitTenderRoutes(routeGroup, &route.TenderHandler)
-	InitBidRoutes(routeGroup, &route.BidHandler)
+	InitTenderRoutes(routeGroup, route.TenderHandler)
+	InitBidRoutes(routeGroup, route.BidHandler)
+	return &route
 }
 
 func SetDefaultPaginationParamIfEmpty(limit, offset string) (string, string) {

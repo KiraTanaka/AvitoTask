@@ -4,7 +4,7 @@ import "avitoTask/internal/db"
 
 const quorum int = 3
 
-func MakingDecision(bid db.BidModel, tender db.TenderModel, bidId, tenderId, username, decision string) error {
+func MakingDecision(bid *db.BidModel, tender *db.TenderModel, bidId, tenderId, username, decision string) error {
 	tx, err := bid.BeginTransaction()
 	if err != nil {
 		return err

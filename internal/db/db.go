@@ -23,17 +23,13 @@ type OrganizationModel struct {
 	db *sqlx.DB
 }
 type DbModels struct {
-	UserModel         UserModel
-	OrganizationModel OrganizationModel
-	TenderModel       TenderModel
-	BidModel          BidModel
+	UserModel         *UserModel
+	OrganizationModel *OrganizationModel
+	TenderModel       *TenderModel
+	BidModel          *BidModel
 }
 
 var ErrorNoRows error = sql.ErrNoRows
-
-type Model interface {
-	CheckExists(string) error
-}
 
 //go:embed queries/checkUserExists.sql
 var checkUserExistsQuery string
@@ -41,7 +37,7 @@ var checkUserExistsQuery string
 //go:embed queries/checkOrganizationExists.sql
 var checkOrganizationExistsQuery string
 
-func NewDbConnect(config *config.Configuration) (DbModels, error) {
+func NewDbConnect(config *config.Configuration) (*DbModels, error) {
 	var dbModels DbModels
 	var err error
 	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s "+
@@ -51,20 +47,20 @@ func NewDbConnect(config *config.Configuration) (DbModels, error) {
 	db, err := sqlx.Connect("postgres", psqlInfo)
 	if err != nil {
 		log.Error(err)
-		return dbModels, err
+		return &dbModels, err
 	}
 
 	err = db.Ping()
 	if err != nil {
 		log.Error(err)
-		return dbModels, err
+		return &dbModels, err
 	}
 	log.Info("Connection to the database is completed.")
 
 	driver, err := postgres.WithInstance(db.DB, &postgres.Config{})
 	if err != nil {
 		log.Error(err)
-		return dbModels, err
+		return &dbModels, err
 	}
 
 	m, err := migrate.NewWithDatabaseInstance(
@@ -81,19 +77,21 @@ func NewDbConnect(config *config.Configuration) (DbModels, error) {
 	}
 	log.Info("Verification and application of missing migrations is completed.")
 
-	dbModels = DbModels{UserModel: UserModel{db: db},
-		OrganizationModel: OrganizationModel{db: db},
-		TenderModel:       TenderModel{db: db},
-		BidModel:          BidModel{db: db}}
+	dbModels = DbModels{
+		UserModel:         &UserModel{db: db},
+		OrganizationModel: &OrganizationModel{db: db},
+		TenderModel:       &TenderModel{db: db},
+		BidModel:          &BidModel{db: db},
+	}
 
-	return dbModels, nil
+	return &dbModels, nil
 }
 
-func (m UserModel) CheckExists(username string) error {
+func (m *UserModel) CheckExists(username string) error {
 	var userExists bool
 	return m.db.Get(&userExists, checkUserExistsQuery, username)
 }
-func (m OrganizationModel) CheckExists(organizationId string) error {
+func (m *OrganizationModel) CheckExists(organizationId string) error {
 	var organizationExists bool
 	return m.db.Get(&organizationExists, checkOrganizationExistsQuery, organizationId)
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func CheckUser(model db.Model, username string) errors.HttpError {
+func CheckUser(model *db.UserModel, username string) errors.HttpError {
 	if username == "" {
 		return errors.GetUserNotPassedError()
 	}
@@ -24,7 +24,7 @@ func CheckUser(model db.Model, username string) errors.HttpError {
 	return errors.HttpError{}
 }
 
-func CheckOrganization(model db.Model, organizationId string) errors.HttpError {
+func CheckOrganization(model *db.OrganizationModel, organizationId string) errors.HttpError {
 
 	err := uuid.Validate(organizationId)
 	if err != nil {
@@ -40,7 +40,7 @@ func CheckOrganization(model db.Model, organizationId string) errors.HttpError {
 	return errors.HttpError{}
 }
 
-func CheckTender(model db.Model, tenderId string) errors.HttpError {
+func CheckTender(model *db.TenderModel, tenderId string) errors.HttpError {
 	if tenderId == "" {
 		return errors.GetTenderIdNotPassedError()
 	}
@@ -58,7 +58,7 @@ func CheckTender(model db.Model, tenderId string) errors.HttpError {
 	return errors.HttpError{}
 }
 
-func CheckBid(model db.Model, bidId string) errors.HttpError {
+func CheckBid(model *db.BidModel, bidId string) errors.HttpError {
 	if bidId == "" {
 		return errors.GetBidIdNotPassedError()
 	}
